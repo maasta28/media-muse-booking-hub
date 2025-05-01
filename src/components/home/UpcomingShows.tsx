@@ -1,57 +1,47 @@
 
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import EventCard, { EventCardProps } from "../ui/EventCard";
 import { Link } from "react-router-dom";
-
-// Mock data for upcoming shows/events
-const upcomingEvents: EventCardProps[] = [
-  {
-    id: "1",
-    title: "Live Jazz Night with The Blue Notes",
-    imageUrl: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-    date: "June 15, 2025",
-    time: "8:00 PM",
-    venue: "Blue Moon Jazz Club",
-    city: "New York",
-    category: "Music",
-    price: "$25"
-  },
-  {
-    id: "2",
-    title: "Contemporary Dance Workshop with Mia Chen",
-    imageUrl: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-    date: "June 18, 2025",
-    time: "10:00 AM",
-    venue: "Urban Dance Studio",
-    city: "Los Angeles",
-    category: "Dance",
-    price: "$40"
-  },
-  {
-    id: "3",
-    title: "Film Screening: 'Beyond the Horizon'",
-    imageUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-    date: "June 20, 2025",
-    time: "7:30 PM",
-    venue: "Cineplex Arts",
-    city: "Chicago",
-    category: "Film",
-    price: "$15"
-  },
-  {
-    id: "4",
-    title: "Comedy Night: Stand-up Showcase",
-    imageUrl: "https://images.unsplash.com/photo-1527224857830-43a7acc85260?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-    date: "June 22, 2025",
-    time: "9:00 PM",
-    venue: "Laugh Factory",
-    city: "Boston",
-    category: "Comedy",
-    price: "$30"
-  }
-];
+import { fetchEvents, EventWithCategory } from "@/services/eventService";
 
 const UpcomingShows = () => {
+  // Fetch events from Supabase
+  const { data: eventsData = [], isLoading, isError } = useQuery({
+    queryKey: ['upcomingEvents'],
+    queryFn: () => fetchEvents({ }),
+    select: (data) => data.slice(0, 4), // Only show the first 4 events
+  });
+
+  // Map database events to EventCard props
+  const mapEventToProps = (event: EventWithCategory): EventCardProps => {
+    // Format the date
+    const eventDate = new Date(event.event_date);
+    const formattedDate = eventDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    
+    // Format the price
+    let price = `$${event.price_start}`;
+    if (event.price_end && event.price_end > event.price_start) {
+      price = `$${event.price_start} - $${event.price_end}`;
+    }
+
+    return {
+      id: event.id,
+      title: event.title,
+      imageUrl: event.image_url || "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
+      date: formattedDate,
+      time: event.event_time,
+      venue: event.venue,
+      city: event.city,
+      category: event.category_name || "Event",
+      price: price
+    };
+  };
+
   return (
     <section className="py-16 bg-gray-50">
       <div className="container mx-auto px-4">
@@ -63,11 +53,23 @@ const UpcomingShows = () => {
           </p>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
-          {upcomingEvents.map((event) => (
-            <EventCard key={event.id} {...event} />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-white rounded-lg shadow-sm h-80 animate-pulse"></div>
+            ))}
+          </div>
+        ) : isError ? (
+          <div className="text-center py-10">
+            <p className="text-gray-600">Failed to load upcoming events. Please try again later.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
+            {eventsData.map((event) => (
+              <EventCard key={event.id} {...mapEventToProps(event)} />
+            ))}
+          </div>
+        )}
         
         <div className="mt-10 text-center">
           <Button asChild className="bg-entertainment-600 hover:bg-entertainment-700">

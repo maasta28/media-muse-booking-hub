@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export interface EventCardProps {
   id: string;
@@ -61,15 +62,6 @@ const EventCard = ({ id, title, imageUrl, date, time, venue, city, category, pri
         </CardFooter>
       </Card>
     </Link>
-  );
-};
-
-// Add Button component to avoid import errors
-const Button = ({ children, variant, className }: { children: React.ReactNode, variant?: string, className?: string }) => {
-  return (
-    <button className={`px-3 py-1 rounded-md text-sm font-medium ${className}`}>
-      {children}
-    </button>
   );
 };
 

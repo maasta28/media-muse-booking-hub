@@ -9,7 +9,234 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      artist_categories: {
+        Row: {
+          artist_id: string
+          category_id: string
+          id: string
+        }
+        Insert: {
+          artist_id: string
+          category_id: string
+          id?: string
+        }
+        Update: {
+          artist_id?: string
+          category_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artist_categories_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "artists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "artist_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      artists: {
+        Row: {
+          bio: string | null
+          created_at: string | null
+          id: string
+          image_url: string | null
+          name: string
+          profession: string
+          rating: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          bio?: string | null
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          name: string
+          profession: string
+          rating?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          bio?: string | null
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          name?: string
+          profession?: string
+          rating?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bookings: {
+        Row: {
+          booking_date: string | null
+          created_at: string | null
+          event_id: string
+          id: string
+          seat_count: number
+          status: string
+          total_amount: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          booking_date?: string | null
+          created_at?: string | null
+          event_id: string
+          id?: string
+          seat_count: number
+          status: string
+          total_amount: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          booking_date?: string | null
+          created_at?: string | null
+          event_id?: string
+          id?: string
+          seat_count?: number
+          status?: string
+          total_amount?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      categories: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      events: {
+        Row: {
+          artist_id: string | null
+          available_seats: number
+          category_id: string | null
+          city: string
+          created_at: string | null
+          description: string | null
+          event_date: string
+          event_time: string
+          id: string
+          image_url: string | null
+          price_end: number | null
+          price_start: number
+          title: string
+          updated_at: string | null
+          venue: string
+        }
+        Insert: {
+          artist_id?: string | null
+          available_seats: number
+          category_id?: string | null
+          city: string
+          created_at?: string | null
+          description?: string | null
+          event_date: string
+          event_time: string
+          id?: string
+          image_url?: string | null
+          price_end?: number | null
+          price_start: number
+          title: string
+          updated_at?: string | null
+          venue: string
+        }
+        Update: {
+          artist_id?: string | null
+          available_seats?: number
+          category_id?: string | null
+          city?: string
+          created_at?: string | null
+          description?: string | null
+          event_date?: string
+          event_time?: string
+          id?: string
+          image_url?: string | null
+          price_end?: number | null
+          price_start?: number
+          title?: string
+          updated_at?: string | null
+          venue?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "artists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          full_name: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
