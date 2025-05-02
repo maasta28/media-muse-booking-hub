@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -7,21 +8,36 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
 
-// Define simpler types without circular references
+// Define simplified types without circular references
 type EventCategory = {
   name: string;
-}
+};
 
 type EventArtist = {
   name: string;
-}
+};
 
-// Define the types for events and bookings to match the actual database schema
+// Define the types for events and bookings
 type EventWithCategory = {
   id: string;
   title: string;
@@ -41,7 +57,7 @@ type EventWithCategory = {
   updated_at: string | null;
   price_start: number;
   price_end: number | null;
-}
+};
 
 type BookingWithRelations = {
   id: string;
@@ -60,7 +76,7 @@ type BookingWithRelations = {
   profiles?: {
     full_name: string | null;
   } | null;
-}
+};
 
 const OrganizerDashboard = () => {
   const navigate = useNavigate();
@@ -91,30 +107,35 @@ const OrganizerDashboard = () => {
     },
   });
   
-  // Fetch organizer's events with simplified query structure
+  // Fetch organizer's events with simplified query
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["organizerEvents", session?.user?.id, searchQuery],
     enabled: !!session?.user?.id,
     queryFn: async () => {
-      // Separate query definition and execution to avoid deep nesting
-      let queryStr = `*, categories(name), artists(name)`;
-      
-      // Execute query with filters
-      const { data, error } = await supabase
+      // Build query
+      let query = supabase
         .from("events")
-        .select(queryStr)
-        .eq("user_id", session!.user.id)
-        .ilike(searchQuery ? "title" : "id", searchQuery ? `%${searchQuery}%` : session!.user.id)
-        .order("event_date", { ascending: true });
+        .select("*, categories(name), artists(name)")
+        .eq("user_id", session!.user.id);
+      
+      // Apply search filter if provided
+      if (searchQuery) {
+        query = query.ilike("title", `%${searchQuery}%`);
+      }
+      
+      // Execute the query
+      const { data, error } = await query.order("event_date", { ascending: true });
       
       if (error) throw error;
-      return data as EventWithCategory[];
+      
+      // Type assertion to match our expected type
+      return data as unknown as EventWithCategory[];
     },
   });
   
   // Fetch bookings for organizer's events
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
-    queryKey: ["organizerBookings", session?.user?.id],
+    queryKey: ["organizerBookings", session?.user?.id, events],
     enabled: !!session?.user?.id && events.length > 0,
     queryFn: async () => {
       const eventIds = events.map(event => event.id);
@@ -130,7 +151,7 @@ const OrganizerDashboard = () => {
         .order("created_at", { ascending: false });
       
       if (error) throw error;
-      return data as BookingWithRelations[];
+      return data as unknown as BookingWithRelations[];
     },
   });
 
@@ -337,30 +358,30 @@ const OrganizerDashboard = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="px-4 py-3 text-left">Event</th>
-                      <th className="px-4 py-3 text-left">Attendee</th>
-                      <th className="px-4 py-3 text-left">Date</th>
-                      <th className="px-4 py-3 text-left">Seats</th>
-                      <th className="px-4 py-3 text-left">Amount</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Event</TableHead>
+                      <TableHead>Attendee</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Seats</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {bookings.map((booking) => (
-                      <tr key={booking.id} className="border-b hover:bg-gray-50">
-                        <td className="px-4 py-3">{booking.events?.title}</td>
-                        <td className="px-4 py-3">{booking.profiles?.full_name || "Anonymous"}</td>
-                        <td className="px-4 py-3">
+                      <TableRow key={booking.id}>
+                        <TableCell>{booking.events?.title}</TableCell>
+                        <TableCell>{booking.profiles?.full_name || "Anonymous"}</TableCell>
+                        <TableCell>
                           {booking.events?.event_date ? 
                             new Date(booking.events.event_date).toLocaleDateString() : 
                             "N/A"}
-                        </td>
-                        <td className="px-4 py-3">{booking.seat_count}</td>
-                        <td className="px-4 py-3">${booking.total_amount.toFixed(2)}</td>
-                        <td className="px-4 py-3">
+                        </TableCell>
+                        <TableCell>{booking.seat_count}</TableCell>
+                        <TableCell>${booking.total_amount.toFixed(2)}</TableCell>
+                        <TableCell>
                           <Badge className={
                             booking.status === "confirmed" ? "bg-green-500" : 
                             booking.status === "pending" ? "bg-yellow-500" : 
@@ -368,11 +389,11 @@ const OrganizerDashboard = () => {
                           }>
                             {booking.status}
                           </Badge>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </TabsContent>
