@@ -33,7 +33,7 @@ const Hero = () => {
             </Button>
             <Button asChild variant="outline" className="border-white text-white hover:bg-white/10 text-base px-8 py-6">
               <Link to="/artists">
-                Discover Artists
+                Browse Talents
               </Link>
             </Button>
           </div>

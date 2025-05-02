@@ -2,13 +2,29 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Search, User, Ticket } from "lucide-react";
+import { Menu, X, Search, User, Ticket, LogOut } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { user, isLoading, signOut, isOrganizer } = useAuth();
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success("Successfully signed out");
   };
 
   return (
@@ -31,30 +47,63 @@ const Navbar = () => {
             Events
           </Link>
           <Link to="/artists" className="text-sm font-medium hover:text-entertainment-600 transition-colors">
-            Artists
+            Talents
           </Link>
-          <Link to="/about" className="text-sm font-medium hover:text-entertainment-600 transition-colors">
-            About
-          </Link>
+          {isOrganizer && (
+            <Link to="/organizer/dashboard" className="text-sm font-medium hover:text-entertainment-600 transition-colors">
+              Dashboard
+            </Link>
+          )}
         </nav>
 
         <div className="flex items-center gap-x-4">
           <Button variant="ghost" size="icon" className="hidden md:flex">
             <Search className="h-5 w-5" />
           </Button>
+          
           <Button variant="ghost" size="icon" className="hidden md:flex">
             <Ticket className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" className="hidden md:flex">
-            <User className="h-5 w-5" />
-          </Button>
 
-          <Button 
-            variant="outline" 
-            className="hidden md:flex bg-entertainment-500 text-white hover:bg-entertainment-600 border-none"
-          >
-            Sign In
-          </Button>
+          {isLoading ? (
+            <div className="h-9 w-9 rounded-full bg-gray-200 animate-pulse"></div>
+          ) : user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  <User className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/profile">Profile</Link>
+                </DropdownMenuItem>
+                {isOrganizer && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/organizer/dashboard">Dashboard</Link>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem asChild>
+                  <Link to="/bookings">My Bookings</Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut} className="text-red-500">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button 
+              variant="outline" 
+              className="hidden md:flex bg-entertainment-500 text-white hover:bg-entertainment-600 border-none"
+              asChild
+            >
+              <Link to="/auth">Sign In</Link>
+            </Button>
+          )}
 
           {/* Mobile Menu Button */}
           <Button variant="ghost" size="icon" className="md:hidden" onClick={toggleMenu}>
@@ -87,22 +136,56 @@ const Navbar = () => {
                 className="text-sm font-medium hover:text-entertainment-600 transition-colors p-2"
                 onClick={toggleMenu}
               >
-                Artists
+                Talents
               </Link>
-              <Link 
-                to="/about" 
-                className="text-sm font-medium hover:text-entertainment-600 transition-colors p-2"
-                onClick={toggleMenu}
-              >
-                About
-              </Link>
-              <Button 
-                variant="outline" 
-                className="bg-entertainment-500 text-white hover:bg-entertainment-600 border-none w-full"
-                onClick={toggleMenu}
-              >
-                Sign In
-              </Button>
+              {isOrganizer && (
+                <Link 
+                  to="/organizer/dashboard" 
+                  className="text-sm font-medium hover:text-entertainment-600 transition-colors p-2"
+                  onClick={toggleMenu}
+                >
+                  Dashboard
+                </Link>
+              )}
+              
+              {user ? (
+                <>
+                  <Link 
+                    to="/profile" 
+                    className="text-sm font-medium hover:text-entertainment-600 transition-colors p-2"
+                    onClick={toggleMenu}
+                  >
+                    Profile
+                  </Link>
+                  <Link 
+                    to="/bookings" 
+                    className="text-sm font-medium hover:text-entertainment-600 transition-colors p-2"
+                    onClick={toggleMenu}
+                  >
+                    My Bookings
+                  </Link>
+                  <Button 
+                    variant="ghost"
+                    className="justify-start text-red-500 hover:bg-red-50 hover:text-red-600 p-2"
+                    onClick={() => {
+                      handleSignOut();
+                      toggleMenu();
+                    }}
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Sign Out
+                  </Button>
+                </>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  className="bg-entertainment-500 text-white hover:bg-entertainment-600 border-none w-full"
+                  onClick={toggleMenu}
+                  asChild
+                >
+                  <Link to="/auth">Sign In</Link>
+                </Button>
+              )}
             </nav>
           </div>
         </div>

@@ -10,6 +10,9 @@ import ArtistForm from "./pages/ArtistForm";
 import Artists from "./pages/Artists";
 import EventDetails from "./pages/EventDetails";
 import Events from "./pages/Events";
+import Auth from "./pages/Auth";
+import OrganizerOnboarding from "./pages/OrganizerOnboarding";
+import OrganizerDashboard from "./pages/OrganizerDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +31,9 @@ const App = () => (
           <Route path="/artists" element={<Artists />} />
           <Route path="/event/:id" element={<EventDetails />} />
           <Route path="/events" element={<Events />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/organizer/onboarding" element={<OrganizerOnboarding />} />
+          <Route path="/organizer/dashboard" element={<OrganizerDashboard />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
