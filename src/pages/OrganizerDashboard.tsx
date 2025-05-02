@@ -12,6 +12,15 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
 
+// Define simpler types without circular references
+type EventCategory = {
+  name: string;
+}
+
+type EventArtist = {
+  name: string;
+}
+
 // Define the types for events and bookings to match the actual database schema
 type EventWithCategory = {
   id: string;
@@ -23,9 +32,9 @@ type EventWithCategory = {
   city: string;
   available_seats: number;
   image_url?: string | null;
-  // Changed: user_id is not in the events table, events are linked to organizers via profiles
-  categories?: { name: string } | null;
-  artists?: { name: string } | null;
+  user_id: string;
+  categories?: EventCategory | null;
+  artists?: EventArtist | null;
   category_id: string | null;
   artist_id: string | null;
   created_at: string | null;
@@ -82,27 +91,21 @@ const OrganizerDashboard = () => {
     },
   });
   
-  // Fetch organizer's events
+  // Fetch organizer's events with simplified query structure
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["organizerEvents", session?.user?.id, searchQuery],
     enabled: !!session?.user?.id,
     queryFn: async () => {
-      // Define the base query
-      const query = supabase
+      // Separate query definition and execution to avoid deep nesting
+      let queryStr = `*, categories(name), artists(name)`;
+      
+      // Execute query with filters
+      const { data, error } = await supabase
         .from("events")
-        .select(`
-          *,
-          categories(name),
-          artists(name)
-        `)
-        .eq("user_id", session!.user.id);
-      
-      // Add search filter if provided
-      const filteredQuery = searchQuery 
-        ? query.ilike("title", `%${searchQuery}%`) 
-        : query;
-      
-      const { data, error } = await filteredQuery.order("event_date", { ascending: true });
+        .select(queryStr)
+        .eq("user_id", session!.user.id)
+        .ilike(searchQuery ? "title" : "id", searchQuery ? `%${searchQuery}%` : session!.user.id)
+        .order("event_date", { ascending: true });
       
       if (error) throw error;
       return data as EventWithCategory[];
