@@ -11,7 +11,40 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { Loader2, Plus, BarChart2, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
+import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
+
+// Define the types for events and bookings to avoid excessive type recursion
+type EventWithCategory = {
+  id: string;
+  title: string;
+  description: string;
+  event_date: string;
+  event_time: string;
+  venue: string;
+  city: string;
+  available_seats: number;
+  image_url?: string;
+  user_id: string;
+  categories?: { name: string };
+  artists?: { name: string };
+}
+
+type BookingWithRelations = {
+  id: string;
+  event_id: string;
+  user_id: string;
+  seat_count: number;
+  total_amount: number;
+  status: string;
+  created_at: string;
+  events?: {
+    title: string;
+    event_date: string;
+  };
+  profiles?: {
+    full_name: string;
+  };
+}
 
 const OrganizerDashboard = () => {
   const navigate = useNavigate();
@@ -63,7 +96,7 @@ const OrganizerDashboard = () => {
       const { data, error } = await query.order("event_date", { ascending: true });
       
       if (error) throw error;
-      return data;
+      return data as EventWithCategory[];
     },
   });
   
@@ -85,7 +118,7 @@ const OrganizerDashboard = () => {
         .order("created_at", { ascending: false });
       
       if (error) throw error;
-      return data;
+      return data as BookingWithRelations[];
     },
   });
 
