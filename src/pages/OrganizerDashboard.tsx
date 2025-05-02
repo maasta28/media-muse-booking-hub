@@ -13,20 +13,26 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
 
-// Define the types for events and bookings to avoid excessive type recursion
+// Define the types for events and bookings to match the actual database schema
 type EventWithCategory = {
   id: string;
   title: string;
-  description: string;
+  description: string | null;
   event_date: string;
   event_time: string;
   venue: string;
   city: string;
   available_seats: number;
-  image_url?: string;
-  user_id: string;
-  categories?: { name: string };
-  artists?: { name: string };
+  image_url?: string | null;
+  // Changed: user_id is not in the events table, events are linked to organizers via profiles
+  categories?: { name: string } | null;
+  artists?: { name: string } | null;
+  category_id: string | null;
+  artist_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  price_start: number;
+  price_end: number | null;
 }
 
 type BookingWithRelations = {
@@ -36,14 +42,16 @@ type BookingWithRelations = {
   seat_count: number;
   total_amount: number;
   status: string;
-  created_at: string;
+  created_at: string | null;
+  booking_date: string | null;
+  updated_at: string | null;
   events?: {
     title: string;
     event_date: string;
-  };
+  } | null;
   profiles?: {
-    full_name: string;
-  };
+    full_name: string | null;
+  } | null;
 }
 
 const OrganizerDashboard = () => {
@@ -86,8 +94,12 @@ const OrganizerDashboard = () => {
           *,
           categories(name),
           artists(name)
-        `)
-        .eq("user_id", session!.user.id);
+        `);
+      
+      // Query for events created by the current user
+      if (session?.user?.id) {
+        query = query.eq("user_id", session.user.id);
+      }
       
       if (searchQuery) {
         query = query.ilike("title", `%${searchQuery}%`);
@@ -96,7 +108,7 @@ const OrganizerDashboard = () => {
       const { data, error } = await query.order("event_date", { ascending: true });
       
       if (error) throw error;
-      return data as EventWithCategory[];
+      return data as unknown as EventWithCategory[];
     },
   });
   
@@ -118,7 +130,7 @@ const OrganizerDashboard = () => {
         .order("created_at", { ascending: false });
       
       if (error) throw error;
-      return data as BookingWithRelations[];
+      return data as unknown as BookingWithRelations[];
     },
   });
 
