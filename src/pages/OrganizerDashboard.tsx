@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -28,7 +27,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
 
-// Define simplified types without circular references
+// Simplified types to avoid deep instantiation issues
 type EventCategory = {
   name: string;
 };
@@ -37,7 +36,7 @@ type EventArtist = {
   name: string;
 };
 
-// Define the types for events and bookings
+// Simplified type for events
 type EventWithCategory = {
   id: string;
   title: string;
@@ -59,6 +58,7 @@ type EventWithCategory = {
   price_end: number | null;
 };
 
+// Simplified type for bookings
 type BookingWithRelations = {
   id: string;
   event_id: string;
@@ -107,37 +107,38 @@ const OrganizerDashboard = () => {
     },
   });
   
-  // Fetch organizer's events with simplified query
+  // Fetch organizer's events - simplified query to avoid deep type instantiation
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["organizerEvents", session?.user?.id, searchQuery],
     enabled: !!session?.user?.id,
     queryFn: async () => {
-      // Build query
+      if (!session?.user?.id) return [];
+      
       let query = supabase
         .from("events")
         .select("*, categories(name), artists(name)")
-        .eq("user_id", session!.user.id);
+        .eq("user_id", session.user.id);
       
       // Apply search filter if provided
       if (searchQuery) {
         query = query.ilike("title", `%${searchQuery}%`);
       }
       
-      // Execute the query
       const { data, error } = await query.order("event_date", { ascending: true });
       
       if (error) throw error;
       
-      // Type assertion to match our expected type
-      return data as unknown as EventWithCategory[];
+      return data as EventWithCategory[];
     },
   });
   
-  // Fetch bookings for organizer's events
+  // Fetch bookings for organizer's events - simplified query to avoid deep type instantiation
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
     queryKey: ["organizerBookings", session?.user?.id, events],
     enabled: !!session?.user?.id && events.length > 0,
     queryFn: async () => {
+      if (!events.length) return [];
+      
       const eventIds = events.map(event => event.id);
       
       const { data, error } = await supabase
@@ -151,7 +152,8 @@ const OrganizerDashboard = () => {
         .order("created_at", { ascending: false });
       
       if (error) throw error;
-      return data as unknown as BookingWithRelations[];
+      
+      return data as BookingWithRelations[];
     },
   });
 
