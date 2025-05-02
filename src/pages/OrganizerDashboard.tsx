@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -88,27 +87,25 @@ const OrganizerDashboard = () => {
     queryKey: ["organizerEvents", session?.user?.id, searchQuery],
     enabled: !!session?.user?.id,
     queryFn: async () => {
-      let query = supabase
+      // Define the base query
+      const query = supabase
         .from("events")
         .select(`
           *,
           categories(name),
           artists(name)
-        `);
+        `)
+        .eq("user_id", session!.user.id);
       
-      // Query for events created by the current user
-      if (session?.user?.id) {
-        query = query.eq("user_id", session.user.id);
-      }
+      // Add search filter if provided
+      const filteredQuery = searchQuery 
+        ? query.ilike("title", `%${searchQuery}%`) 
+        : query;
       
-      if (searchQuery) {
-        query = query.ilike("title", `%${searchQuery}%`);
-      }
-      
-      const { data, error } = await query.order("event_date", { ascending: true });
+      const { data, error } = await filteredQuery.order("event_date", { ascending: true });
       
       if (error) throw error;
-      return data as unknown as EventWithCategory[];
+      return data as EventWithCategory[];
     },
   });
   
@@ -130,7 +127,7 @@ const OrganizerDashboard = () => {
         .order("created_at", { ascending: false });
       
       if (error) throw error;
-      return data as unknown as BookingWithRelations[];
+      return data as BookingWithRelations[];
     },
   });
 
