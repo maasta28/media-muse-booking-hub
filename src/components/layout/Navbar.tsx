@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Search, User, Ticket, LogOut } from "lucide-react";
 import {
@@ -17,6 +17,7 @@ import { toast } from "sonner";
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { user, isLoading, signOut, isOrganizer } = useAuth();
+  const navigate = useNavigate();
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -27,15 +28,22 @@ const Navbar = () => {
     toast.success("Successfully signed out");
   };
 
+  const goToProfile = () => {
+    if (user) {
+      // Navigate to the user's artist portfolio if it exists
+      navigate(`/artist/${user.id}`);
+    } else {
+      toast.error("Please sign in to view your profile");
+      navigate("/auth");
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b">
       <div className="container mx-auto px-4 flex h-16 items-center justify-between">
         <div className="flex items-center">
           <Link to="/" className="flex items-center">
-            <img src="/logo.svg" alt="Maasta Logo" className="h-8 w-8 mr-2" />
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-entertainment-600 to-entertainment-400 bg-clip-text text-transparent">
-              Maasta
-            </h1>
+            <img src="/logo.svg" alt="Maasta Logo" className="h-12 w-auto mr-2" />
           </Link>
         </div>
 
@@ -66,6 +74,16 @@ const Navbar = () => {
             <Ticket className="h-5 w-5" />
           </Button>
 
+          {/* My Profile Button */}
+          <Button 
+            variant="outline" 
+            onClick={goToProfile}
+            className="hidden md:flex border-entertainment-500 text-entertainment-500 hover:bg-entertainment-50 hover:text-entertainment-600"
+          >
+            <User className="h-4 w-4 mr-2" />
+            My Profile
+          </Button>
+
           {isLoading ? (
             <div className="h-9 w-9 rounded-full bg-gray-200 animate-pulse"></div>
           ) : user ? (
@@ -79,7 +97,7 @@ const Navbar = () => {
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link to="/profile">Profile</Link>
+                  <Link to={`/artist/${user.id}`}>My Profile</Link>
                 </DropdownMenuItem>
                 {isOrganizer && (
                   <DropdownMenuItem asChild>
@@ -142,6 +160,17 @@ const Navbar = () => {
               >
                 Talents
               </Link>
+              <Button
+                variant="outline"
+                className="justify-start border-entertainment-500 text-entertainment-500"
+                onClick={() => {
+                  goToProfile();
+                  toggleMenu();
+                }}
+              >
+                <User className="h-4 w-4 mr-2" />
+                My Profile
+              </Button>
               {isOrganizer && (
                 <Link 
                   to="/organizer/dashboard" 

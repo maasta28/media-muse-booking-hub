@@ -13,8 +13,9 @@ export type PortfolioItem = {
   title: string;
   description: string;
   media_url: string;
-  media_type: 'image' | 'video' | 'link';
+  media_type: 'image' | 'video' | 'link' | 'social';
   created_at?: string;
+  social_platform?: 'instagram' | 'youtube' | 'tiktok' | 'facebook' | 'twitter' | 'linkedin' | 'other';
 }
 
 /**
@@ -232,7 +233,8 @@ export const savePortfolioItem = async (item: Partial<PortfolioItem>) => {
             title: item.title,
             description: item.description,
             media_url: item.media_url,
-            media_type: item.media_type
+            media_type: item.media_type,
+            social_platform: item.social_platform
           })
           .eq('id', item.id!)
           .select()
@@ -244,7 +246,8 @@ export const savePortfolioItem = async (item: Partial<PortfolioItem>) => {
             title: item.title!,
             description: item.description!,
             media_url: item.media_url!,
-            media_type: item.media_type!
+            media_type: item.media_type!,
+            social_platform: item.social_platform
           })
           .select()
           .single();
@@ -256,6 +259,37 @@ export const savePortfolioItem = async (item: Partial<PortfolioItem>) => {
     return data;
   } catch (error) {
     console.error("Error in savePortfolioItem:", error);
+    throw error;
+  }
+};
+
+/**
+ * Uploads a file to Supabase storage and returns the public URL
+ */
+export const uploadPortfolioMedia = async (file: File, folder: string = 'portfolio-media') => {
+  try {
+    // Generate a unique filename
+    const timestamp = new Date().getTime();
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${timestamp}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+    
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from(folder)
+      .upload(fileName, file);
+    
+    if (error) {
+      throw new Error(`Failed to upload file: ${error.message}`);
+    }
+    
+    // Get the public URL
+    const { data: publicUrlData } = supabase.storage
+      .from(folder)
+      .getPublicUrl(fileName);
+      
+    return publicUrlData.publicUrl;
+  } catch (error) {
+    console.error("Error in uploadPortfolioMedia:", error);
     throw error;
   }
 };

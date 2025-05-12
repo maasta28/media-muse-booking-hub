@@ -74,6 +74,14 @@ export default {
 					700: '#4d3a84',
 					800: '#3c2e6a',
 					900: '#302655',
+				},
+				maasta: {
+					primary: '#E86C42',
+					'primary-light': '#FF8D63',
+					'primary-dark': '#D04E24',
+					secondary: '#9B44F6',
+					'secondary-light': '#B975FF',
+					'secondary-dark': '#7B35C4',
 				}
 			},
 			borderRadius: {

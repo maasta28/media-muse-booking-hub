@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -8,26 +9,28 @@ import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { fetchArtistById, fetchPortfolioItems, savePortfolioItem, deletePortfolioItem, PortfolioItem } from "@/services/artistService";
+import { fetchArtistById, fetchPortfolioItems, savePortfolioItem, uploadPortfolioMedia, deletePortfolioItem, PortfolioItem } from "@/services/artistService";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { User, Calendar, Clock, MapPin, Image, Video, Link, Edit, Trash2, Plus } from "lucide-react";
+import { User, Calendar, Clock, MapPin, Image, Video, Link, Edit, Trash2, Plus, Instagram, Linkedin, Facebook } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 // Form schema for portfolio item
 const portfolioItemSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
   description: z.string().min(2, "Description is required"),
   media_url: z.string().min(2, "Media URL is required"),
-  media_type: z.enum(["image", "video", "link"], {
+  media_type: z.enum(["image", "video", "link", "social"], {
     required_error: "Please select a media type",
   }),
+  social_platform: z.enum(["instagram", "youtube", "tiktok", "facebook", "twitter", "linkedin", "other"]).optional(),
 });
 
 type PortfolioItemFormValues = z.infer<typeof portfolioItemSchema>;
@@ -36,10 +39,13 @@ const ArtistPortfolio = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [isPortfolioDialogOpen, setIsPortfolioDialogOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState<PortfolioItem | null>(null);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Fetch artist data
   const { 
@@ -61,6 +67,9 @@ const ArtistPortfolio = () => {
     enabled: !!id,
   });
 
+  // Check if the user is allowed to edit this profile
+  const canEdit = user && (id === user.id);
+
   // Setup form for portfolio item
   const portfolioForm = useForm<PortfolioItemFormValues>({
     resolver: zodResolver(portfolioItemSchema),
@@ -75,30 +84,27 @@ const ArtistPortfolio = () => {
   // Save portfolio item mutation
   const saveItemMutation = useMutation({
     mutationFn: async (values: PortfolioItemFormValues) => {
-      // If there's a new media file for image type, upload it first
+      // If there's a new media file for image or video type, upload it first
       let mediaUrl = values.media_url;
       
       if (mediaFile && values.media_type === "image") {
-        // Generate a unique filename
-        const timestamp = new Date().getTime();
-        const fileExt = mediaFile.name.split('.').pop();
-        const fileName = `${timestamp}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-        
-        // Upload to Supabase Storage
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('portfolio-images')
-          .upload(fileName, mediaFile);
-        
-        if (uploadError) {
-          throw new Error(`Failed to upload image: ${uploadError.message}`);
+        setUploadProgress(10);
+        try {
+          mediaUrl = await uploadPortfolioMedia(mediaFile, 'portfolio-images');
+          setUploadProgress(100);
+        } catch (error) {
+          setUploadProgress(0);
+          throw error;
         }
-        
-        // Get the public URL
-        const { data: publicUrl } = supabase.storage
-          .from('portfolio-images')
-          .getPublicUrl(fileName);
-          
-        mediaUrl = publicUrl.publicUrl;
+      } else if (mediaFile && values.media_type === "video") {
+        setUploadProgress(10);
+        try {
+          mediaUrl = await uploadPortfolioMedia(mediaFile, 'portfolio-videos');
+          setUploadProgress(100);
+        } catch (error) {
+          setUploadProgress(0);
+          throw error;
+        }
       }
 
       // Save the portfolio item
@@ -107,6 +113,7 @@ const ArtistPortfolio = () => {
         artist_id: id!,
         ...values,
         media_url: mediaUrl,
+        social_platform: values.media_type === 'social' ? values.social_platform : undefined
       });
     },
     onSuccess: () => {
@@ -115,10 +122,13 @@ const ArtistPortfolio = () => {
       setCurrentItem(null);
       setMediaFile(null);
       setMediaPreview(null);
+      setVideoUrl(null);
+      setUploadProgress(0);
       portfolioForm.reset();
       toast.success("Portfolio item saved successfully");
     },
     onError: (error: Error) => {
+      setUploadProgress(0);
       toast.error(error.message || "Failed to save portfolio item");
     }
   });
@@ -143,14 +153,18 @@ const ArtistPortfolio = () => {
         description: item.description,
         media_url: item.media_url,
         media_type: item.media_type,
+        social_platform: item.social_platform,
       });
       if (item.media_type === "image") {
         setMediaPreview(item.media_url);
+      } else if (item.media_type === "video") {
+        setVideoUrl(item.media_url);
       }
     } else {
       setCurrentItem(null);
       portfolioForm.reset();
       setMediaPreview(null);
+      setVideoUrl(null);
       setMediaFile(null);
     }
     
@@ -171,6 +185,12 @@ const ArtistPortfolio = () => {
         portfolioForm.setValue("media_url", "pending_upload");
       };
       reader.readAsDataURL(file);
+    } else if (file.type.startsWith('video/')) {
+      // For video files, just store the file and set the media_url
+      portfolioForm.setValue("media_url", "pending_upload");
+      // Create a temporary object URL for preview
+      const fileUrl = URL.createObjectURL(file);
+      setVideoUrl(fileUrl);
     }
   };
 
@@ -178,8 +198,35 @@ const ArtistPortfolio = () => {
     saveItemMutation.mutate(values);
   };
 
-  // Check if the user is allowed to edit this profile (simplified - in a real app you'd check auth state)
-  const canEdit = true; // This would come from auth context in a real app
+  const handleMediaTypeChange = (value: "image" | "video" | "link" | "social") => {
+    portfolioForm.setValue("media_type", value);
+    // Reset file-related states when changing media type
+    setMediaFile(null);
+    setMediaPreview(null);
+    setVideoUrl(null);
+    portfolioForm.setValue("media_url", "");
+    
+    // If switching to social, set a default social platform
+    if (value === "social") {
+      portfolioForm.setValue("social_platform", "instagram");
+    } else {
+      portfolioForm.setValue("social_platform", undefined);
+    }
+  };
+
+  // Helper to render social media icon
+  const renderSocialIcon = (platform?: string) => {
+    switch (platform) {
+      case 'instagram':
+        return <Instagram className="w-6 h-6 text-maasta-secondary" />;
+      case 'facebook':
+        return <Facebook className="w-6 h-6 text-maasta-secondary" />;
+      case 'linkedin':
+        return <Linkedin className="w-6 h-6 text-maasta-secondary" />;
+      default:
+        return <Link className="w-6 h-6 text-maasta-secondary" />;
+    }
+  };
 
   if (isLoadingArtist) {
     return (
@@ -187,7 +234,7 @@ const ArtistPortfolio = () => {
         <Navbar />
         <main className="flex-grow flex items-center justify-center">
           <div className="text-center">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-entertainment-500 border-r-transparent"></div>
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-maasta-primary border-r-transparent"></div>
             <p className="mt-4 text-gray-600">Loading artist profile...</p>
           </div>
         </main>
@@ -262,7 +309,7 @@ const ArtistPortfolio = () => {
                     
                     <div className="flex flex-wrap gap-2 mb-4">
                       {artist.category_names?.map((category, index) => (
-                        <Badge key={index} variant="secondary" className="bg-entertainment-100 text-entertainment-700">
+                        <Badge key={index} variant="secondary" className="bg-maasta-primary/20 text-maasta-primary">
                           {category}
                         </Badge>
                       ))}
@@ -273,14 +320,14 @@ const ArtistPortfolio = () => {
                     {canEdit && (
                       <Button 
                         onClick={() => navigate(`/artist/edit/${id}`)}
-                        className="border-entertainment-600 text-entertainment-600 hover:bg-entertainment-50"
+                        className="border-maasta-primary text-maasta-primary hover:bg-maasta-primary/10"
                         variant="outline"
                       >
                         <Edit size={18} className="mr-1" />
                         Edit Profile
                       </Button>
                     )}
-                    <Button className="bg-entertainment-600 hover:bg-entertainment-700">
+                    <Button className="bg-maasta-primary hover:bg-maasta-primary/80">
                       Contact Artist
                     </Button>
                   </div>
@@ -357,7 +404,7 @@ const ArtistPortfolio = () => {
                   {canEdit && (
                     <Button 
                       onClick={() => openPortfolioDialog()} 
-                      className="bg-entertainment-600 hover:bg-entertainment-700"
+                      className="bg-maasta-primary hover:bg-maasta-primary/80"
                     >
                       <Plus size={18} className="mr-1" />
                       Add Item
@@ -367,7 +414,7 @@ const ArtistPortfolio = () => {
                 
                 {isLoadingItems ? (
                   <div className="text-center py-8">
-                    <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-entertainment-500 border-r-transparent"></div>
+                    <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-maasta-primary border-r-transparent"></div>
                     <p className="mt-4 text-gray-600">Loading portfolio items...</p>
                   </div>
                 ) : portfolioItems.length === 0 ? (
@@ -378,7 +425,7 @@ const ArtistPortfolio = () => {
                           <p className="text-gray-600 mb-4">You haven't added any portfolio items yet.</p>
                           <Button 
                             onClick={() => openPortfolioDialog()} 
-                            className="bg-entertainment-600 hover:bg-entertainment-700"
+                            className="bg-maasta-primary hover:bg-maasta-primary/80"
                           >
                             <Plus size={18} className="mr-1" />
                             Add Your First Item
@@ -401,20 +448,31 @@ const ArtistPortfolio = () => {
                               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
                           ) : item.media_type === "video" ? (
-                            <iframe 
+                            <video 
                               src={item.media_url}
-                              title={item.title}
-                              className="w-full h-full"
-                              allowFullScreen
+                              controls
+                              className="w-full h-full object-cover"
                             />
-                          ) : (
+                          ) : item.media_type === "social" ? (
                             <div className="flex flex-col items-center justify-center p-4">
-                              <Link className="w-12 h-12 text-entertainment-500 mb-2" />
+                              {renderSocialIcon(item.social_platform)}
                               <a 
                                 href={item.media_url} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="text-entertainment-600 hover:underline"
+                                className="text-maasta-secondary hover:underline mt-2"
+                              >
+                                {item.title}
+                              </a>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center p-4">
+                              <Link className="w-12 h-12 text-maasta-secondary mb-2" />
+                              <a 
+                                href={item.media_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-maasta-secondary hover:underline"
                               >
                                 {item.media_url}
                               </a>
@@ -430,7 +488,7 @@ const ArtistPortfolio = () => {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="text-gray-500 hover:text-entertainment-600"
+                                className="text-gray-500 hover:text-maasta-primary"
                                 onClick={() => openPortfolioDialog(item)}
                               >
                                 <Edit size={16} />
@@ -548,11 +606,8 @@ const ArtistPortfolio = () => {
                     <FormControl>
                       <Select
                         value={field.value}
-                        onValueChange={(value: "image" | "video" | "link") => {
-                          field.onChange(value);
-                          setMediaPreview(null);
-                          setMediaFile(null);
-                          portfolioForm.setValue("media_url", "");
+                        onValueChange={(value: "image" | "video" | "link" | "social") => {
+                          handleMediaTypeChange(value);
                         }}
                       >
                         <SelectTrigger>
@@ -560,8 +615,9 @@ const ArtistPortfolio = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="image">Image</SelectItem>
-                          <SelectItem value="video">Video (embed URL)</SelectItem>
+                          <SelectItem value="video">Video</SelectItem>
                           <SelectItem value="link">External Link</SelectItem>
+                          <SelectItem value="social">Social Media Profile</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormControl>
@@ -618,6 +674,102 @@ const ArtistPortfolio = () => {
                     />
                   </div>
                 </div>
+              ) : portfolioForm.watch("media_type") === "video" ? (
+                <div>
+                  <FormLabel>Video</FormLabel>
+                  <div className="mt-2">
+                    {videoUrl ? (
+                      <div className="relative mb-4">
+                        <video
+                          src={videoUrl}
+                          controls
+                          className="max-h-[200px] rounded-md bg-gray-100 w-full"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="absolute top-2 right-2"
+                          onClick={() => {
+                            setVideoUrl(null);
+                            setMediaFile(null);
+                            portfolioForm.setValue("media_url", "");
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed border-gray-300 rounded-md p-6 text-center">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => document.getElementById("portfolioVideo")?.click()}
+                        >
+                          Upload Video
+                        </Button>
+                        <p className="text-xs text-gray-500 mt-2">
+                          MP4, WebM, or OGG up to 50MB
+                        </p>
+                      </div>
+                    )}
+                    <input
+                      id="portfolioVideo"
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={handleMediaFileChange}
+                    />
+                  </div>
+                </div>
+              ) : portfolioForm.watch("media_type") === "social" ? (
+                <>
+                  <FormField
+                    control={portfolioForm.control}
+                    name="social_platform"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Social Platform</FormLabel>
+                        <FormControl>
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select platform" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="instagram">Instagram</SelectItem>
+                              <SelectItem value="youtube">YouTube</SelectItem>
+                              <SelectItem value="tiktok">TikTok</SelectItem>
+                              <SelectItem value="facebook">Facebook</SelectItem>
+                              <SelectItem value="twitter">Twitter</SelectItem>
+                              <SelectItem value="linkedin">LinkedIn</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={portfolioForm.control}
+                    name="media_url"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Profile URL</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="e.g., https://www.instagram.com/yourprofile" 
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
               ) : (
                 <FormField
                   control={portfolioForm.control}
@@ -625,29 +777,27 @@ const ArtistPortfolio = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {portfolioForm.watch("media_type") === "video" 
-                          ? "Video Embed URL" 
-                          : "External Link URL"}
+                        External Link URL
                       </FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder={
-                            portfolioForm.watch("media_type") === "video"
-                              ? "e.g., https://www.youtube.com/embed/VIDEO_ID"
-                              : "e.g., https://www.yourportfolio.com"
-                          } 
+                          placeholder="e.g., https://www.yourportfolio.com" 
                           {...field} 
                         />
                       </FormControl>
-                      {portfolioForm.watch("media_type") === "video" && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          For YouTube videos, use the format: https://www.youtube.com/embed/VIDEO_ID
-                        </p>
-                      )}
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+              )}
+              
+              {uploadProgress > 0 && uploadProgress < 100 && (
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div 
+                    className="bg-maasta-primary h-2.5 rounded-full transition-all duration-300" 
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
               )}
               
               <DialogFooter>
@@ -661,7 +811,7 @@ const ArtistPortfolio = () => {
                 <Button 
                   type="submit"
                   disabled={saveItemMutation.isPending}
-                  className="bg-entertainment-600 hover:bg-entertainment-700"
+                  className="bg-maasta-primary hover:bg-maasta-primary/80"
                 >
                   {saveItemMutation.isPending ? "Saving..." : currentItem ? "Save Changes" : "Add to Portfolio"}
                 </Button>
