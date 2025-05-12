@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -27,17 +28,17 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
 
-// Simplified types to avoid deep instantiation issues
-type EventCategory = {
-  name: string;
+// Even more simplified types to avoid deep instantiation issues
+type SimpleEventCategory = {
+  name: string | null;
 };
 
-type EventArtist = {
-  name: string;
+type SimpleEventArtist = {
+  name: string | null;
 };
 
-// Simplified type for events
-type EventWithCategory = {
+// Simplified type for events with minimal nesting
+type SimpleEvent = {
   id: string;
   title: string;
   description: string | null;
@@ -48,8 +49,8 @@ type EventWithCategory = {
   available_seats: number;
   image_url?: string | null;
   user_id: string;
-  categories?: EventCategory | null;
-  artists?: EventArtist | null;
+  categories?: SimpleEventCategory | null;
+  artists?: SimpleEventArtist | null;
   category_id: string | null;
   artist_id: string | null;
   created_at: string | null;
@@ -58,8 +59,8 @@ type EventWithCategory = {
   price_end: number | null;
 };
 
-// Simplified type for bookings
-type BookingWithRelations = {
+// Simplified type for bookings with minimal nesting
+type SimpleBooking = {
   id: string;
   event_id: string;
   user_id: string;
@@ -70,8 +71,8 @@ type BookingWithRelations = {
   booking_date: string | null;
   updated_at: string | null;
   events?: {
-    title: string;
-    event_date: string;
+    title: string | null;
+    event_date: string | null;
   } | null;
   profiles?: {
     full_name: string | null;
@@ -107,16 +108,21 @@ const OrganizerDashboard = () => {
     },
   });
   
-  // Fetch organizer's events - simplified query to avoid deep type instantiation
+  // Fetch organizer's events - avoid deep type instantiation by using a simpler query
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["organizerEvents", session?.user?.id, searchQuery],
     enabled: !!session?.user?.id,
     queryFn: async () => {
       if (!session?.user?.id) return [];
       
+      // First query just the events
       let query = supabase
         .from("events")
-        .select("*, categories(name), artists(name)")
+        .select(`
+          id, title, description, event_date, event_time, venue, city,
+          available_seats, image_url, user_id, category_id, artist_id,
+          created_at, updated_at, price_start, price_end
+        `)
         .eq("user_id", session.user.id);
       
       // Apply search filter if provided
@@ -124,36 +130,91 @@ const OrganizerDashboard = () => {
         query = query.ilike("title", `%${searchQuery}%`);
       }
       
-      const { data, error } = await query.order("event_date", { ascending: true });
+      const { data: eventsData, error } = await query.order("event_date", { ascending: true });
       
       if (error) throw error;
       
-      return data as EventWithCategory[];
+      // For each event, get the category and artist names separately
+      const eventsWithDetails: SimpleEvent[] = await Promise.all(
+        eventsData.map(async (event) => {
+          // Get category name if category_id exists
+          let categoryName = null;
+          if (event.category_id) {
+            const { data: categoryData } = await supabase
+              .from("categories")
+              .select("name")
+              .eq("id", event.category_id)
+              .single();
+            categoryName = categoryData?.name || null;
+          }
+          
+          // Get artist name if artist_id exists
+          let artistName = null;
+          if (event.artist_id) {
+            const { data: artistData } = await supabase
+              .from("artists")
+              .select("name")
+              .eq("id", event.artist_id)
+              .single();
+            artistName = artistData?.name || null;
+          }
+          
+          return {
+            ...event,
+            categories: categoryName ? { name: categoryName } : null,
+            artists: artistName ? { name: artistName } : null,
+          };
+        })
+      );
+      
+      return eventsWithDetails;
     },
   });
   
-  // Fetch bookings for organizer's events - simplified query to avoid deep type instantiation
+  // Fetch bookings for organizer's events - simplified to avoid deep type instantiation
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
-    queryKey: ["organizerBookings", session?.user?.id, events],
+    queryKey: ["organizerBookings", session?.user?.id, events.map(e => e.id).join()],
     enabled: !!session?.user?.id && events.length > 0,
     queryFn: async () => {
       if (!events.length) return [];
       
       const eventIds = events.map(event => event.id);
       
-      const { data, error } = await supabase
+      // Simple query without deep nesting
+      const { data: bookingsData, error } = await supabase
         .from("bookings")
-        .select(`
-          *,
-          events(title, event_date),
-          profiles(full_name)
-        `)
+        .select("id, event_id, user_id, seat_count, total_amount, status, created_at, booking_date, updated_at")
         .in("event_id", eventIds)
         .order("created_at", { ascending: false });
       
       if (error) throw error;
       
-      return data as BookingWithRelations[];
+      // For each booking, get the related event and user info separately
+      const bookingsWithDetails: SimpleBooking[] = await Promise.all(
+        bookingsData.map(async (booking) => {
+          // Get event details
+          const { data: eventData } = await supabase
+            .from("events")
+            .select("title, event_date")
+            .eq("id", booking.event_id)
+            .single();
+          
+          // Get user profile
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", booking.user_id)
+            .single();
+          
+          return {
+            ...booking,
+            events: eventData || null,
+            profiles: profileData || null,
+          };
+        })
+      );
+      
+      return bookingsWithDetails;
     },
   });
 
@@ -374,7 +435,7 @@ const OrganizerDashboard = () => {
                   <TableBody>
                     {bookings.map((booking) => (
                       <TableRow key={booking.id}>
-                        <TableCell>{booking.events?.title}</TableCell>
+                        <TableCell>{booking.events?.title || "Unknown Event"}</TableCell>
                         <TableCell>{booking.profiles?.full_name || "Anonymous"}</TableCell>
                         <TableCell>
                           {booking.events?.event_date ? 
