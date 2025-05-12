@@ -27,7 +27,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
 
-// Define simple interface types to prevent deep nesting
+// Define simpler interface types to prevent deep nesting
 interface SimpleEventData {
   id: string;
   title: string;
@@ -79,10 +79,12 @@ const OrganizerDashboard = () => {
     queryKey: ["organizerProfile", session?.user?.id],
     enabled: !!session?.user?.id,
     queryFn: async () => {
+      if (!session?.user?.id) return null;
+      
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
-        .eq("id", session!.user.id)
+        .eq("id", session.user.id)
         .single();
       
       if (error) throw error;
@@ -90,7 +92,7 @@ const OrganizerDashboard = () => {
     },
   });
   
-  // Fetch organizer's events with simplified approach
+  // Fetch organizer's events with simpler approach
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["organizerEvents", session?.user?.id, searchQuery],
     enabled: !!session?.user?.id,
@@ -104,7 +106,7 @@ const OrganizerDashboard = () => {
           .select(`
             id, title, description, event_date, event_time, venue, city,
             available_seats, image_url, category_id, artist_id,
-            created_at, updated_at, price_start, price_end
+            price_start, price_end
           `)
           .eq("user_id", session.user.id);
         
@@ -151,8 +153,7 @@ const OrganizerDashboard = () => {
             artistName = artistData?.name || null;
           }
           
-          // Create enhanced event object with explicit typing
-          const enhancedEvent: SimpleEventData = {
+          enhancedEvents.push({
             id: event.id,
             title: event.title,
             description: event.description,
@@ -168,9 +169,7 @@ const OrganizerDashboard = () => {
             price_end: event.price_end,
             category_name: categoryName,
             artist_name: artistName,
-          };
-          
-          enhancedEvents.push(enhancedEvent);
+          });
         }
         
         return enhancedEvents;
@@ -183,10 +182,10 @@ const OrganizerDashboard = () => {
   
   // Fetch bookings for organizer's events
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
-    queryKey: ["organizerBookings", session?.user?.id, events.map(e => e.id).join()],
-    enabled: !!session?.user?.id && events.length > 0,
+    queryKey: ["organizerBookings", session?.user?.id, events?.map(e => e.id).join()],
+    enabled: !!session?.user?.id && events && events.length > 0,
     queryFn: async () => {
-      if (!events.length) return [];
+      if (!events || !events.length) return [];
       
       try {
         const eventIds = events.map(event => event.id);
@@ -236,8 +235,8 @@ const OrganizerDashboard = () => {
             attendeeName = profileData.full_name;
           }
           
-          // Create enhanced booking with explicit typing
-          const enhancedBooking: SimpleBookingData = {
+          // Create enhanced booking
+          enhancedBookings.push({
             id: booking.id,
             event_id: booking.event_id,
             user_id: booking.user_id,
@@ -249,9 +248,7 @@ const OrganizerDashboard = () => {
             event_title: eventTitle,
             event_date: eventDate,
             attendee_name: attendeeName,
-          };
-          
-          enhancedBookings.push(enhancedBooking);
+          });
         }
         
         return enhancedBookings;
