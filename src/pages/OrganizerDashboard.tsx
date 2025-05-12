@@ -28,17 +28,8 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
 
-// Even more simplified types to avoid deep instantiation issues
-type SimpleEventCategory = {
-  name: string | null;
-};
-
-type SimpleEventArtist = {
-  name: string | null;
-};
-
-// Simplified type for events with minimal nesting
-type SimpleEvent = {
+// Simplified types that avoid deep nesting
+type SimpleEventData = {
   id: string;
   title: string;
   description: string | null;
@@ -49,18 +40,18 @@ type SimpleEvent = {
   available_seats: number;
   image_url?: string | null;
   user_id: string;
-  categories?: SimpleEventCategory | null;
-  artists?: SimpleEventArtist | null;
   category_id: string | null;
   artist_id: string | null;
   created_at: string | null;
   updated_at: string | null;
   price_start: number;
   price_end: number | null;
+  category_name?: string | null;
+  artist_name?: string | null;
 };
 
-// Simplified type for bookings with minimal nesting
-type SimpleBooking = {
+// Simplified type for bookings
+type SimpleBookingData = {
   id: string;
   event_id: string;
   user_id: string;
@@ -70,13 +61,9 @@ type SimpleBooking = {
   created_at: string | null;
   booking_date: string | null;
   updated_at: string | null;
-  events?: {
-    title: string | null;
-    event_date: string | null;
-  } | null;
-  profiles?: {
-    full_name: string | null;
-  } | null;
+  event_title?: string | null;
+  event_date?: string | null;
+  attendee_name?: string | null;
 };
 
 const OrganizerDashboard = () => {
@@ -108,14 +95,14 @@ const OrganizerDashboard = () => {
     },
   });
   
-  // Fetch organizer's events - avoid deep type instantiation by using a simpler query
+  // Fetch organizer's events
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["organizerEvents", session?.user?.id, searchQuery],
     enabled: !!session?.user?.id,
     queryFn: async () => {
       if (!session?.user?.id) return [];
       
-      // First query just the events
+      // First, fetch basic event data
       let query = supabase
         .from("events")
         .select(`
@@ -134,44 +121,46 @@ const OrganizerDashboard = () => {
       
       if (error) throw error;
       
-      // For each event, get the category and artist names separately
-      const eventsWithDetails: SimpleEvent[] = await Promise.all(
-        eventsData.map(async (event) => {
-          // Get category name if category_id exists
-          let categoryName = null;
-          if (event.category_id) {
-            const { data: categoryData } = await supabase
-              .from("categories")
-              .select("name")
-              .eq("id", event.category_id)
-              .single();
-            categoryName = categoryData?.name || null;
-          }
-          
-          // Get artist name if artist_id exists
-          let artistName = null;
-          if (event.artist_id) {
-            const { data: artistData } = await supabase
-              .from("artists")
-              .select("name")
-              .eq("id", event.artist_id)
-              .single();
-            artistName = artistData?.name || null;
-          }
-          
-          return {
-            ...event,
-            categories: categoryName ? { name: categoryName } : null,
-            artists: artistName ? { name: artistName } : null,
-          };
-        })
-      );
+      // Extract event data and enhance with additional details
+      const enhancedEvents: SimpleEventData[] = [];
       
-      return eventsWithDetails;
+      // Process each event one by one to avoid deep nesting issues
+      for (const event of eventsData || []) {
+        // Initialize with base event data
+        const enhancedEvent: SimpleEventData = {
+          ...event as SimpleEventData
+        };
+        
+        // Get category name if category_id exists
+        if (enhancedEvent.category_id) {
+          const { data: categoryData } = await supabase
+            .from("categories")
+            .select("name")
+            .eq("id", enhancedEvent.category_id)
+            .single();
+          
+          enhancedEvent.category_name = categoryData?.name || null;
+        }
+        
+        // Get artist name if artist_id exists
+        if (enhancedEvent.artist_id) {
+          const { data: artistData } = await supabase
+            .from("artists")
+            .select("name")
+            .eq("id", enhancedEvent.artist_id)
+            .single();
+          
+          enhancedEvent.artist_name = artistData?.name || null;
+        }
+        
+        enhancedEvents.push(enhancedEvent);
+      }
+      
+      return enhancedEvents;
     },
   });
   
-  // Fetch bookings for organizer's events - simplified to avoid deep type instantiation
+  // Fetch bookings for organizer's events
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
     queryKey: ["organizerBookings", session?.user?.id, events.map(e => e.id).join()],
     enabled: !!session?.user?.id && events.length > 0,
@@ -180,7 +169,7 @@ const OrganizerDashboard = () => {
       
       const eventIds = events.map(event => event.id);
       
-      // Simple query without deep nesting
+      // Fetch basic booking data
       const { data: bookingsData, error } = await supabase
         .from("bookings")
         .select("id, event_id, user_id, seat_count, total_amount, status, created_at, booking_date, updated_at")
@@ -189,32 +178,40 @@ const OrganizerDashboard = () => {
       
       if (error) throw error;
       
-      // For each booking, get the related event and user info separately
-      const bookingsWithDetails: SimpleBooking[] = await Promise.all(
-        bookingsData.map(async (booking) => {
-          // Get event details
-          const { data: eventData } = await supabase
-            .from("events")
-            .select("title, event_date")
-            .eq("id", booking.event_id)
-            .single();
-          
-          // Get user profile
-          const { data: profileData } = await supabase
-            .from("profiles")
-            .select("full_name")
-            .eq("id", booking.user_id)
-            .single();
-          
-          return {
-            ...booking,
-            events: eventData || null,
-            profiles: profileData || null,
-          };
-        })
-      );
+      // Enhance booking data with related information
+      const enhancedBookings: SimpleBookingData[] = [];
       
-      return bookingsWithDetails;
+      // Process each booking individually to avoid type issues
+      for (const booking of bookingsData || []) {
+        const enhancedBooking: SimpleBookingData = { ...booking as SimpleBookingData };
+        
+        // Get event details
+        const { data: eventData } = await supabase
+          .from("events")
+          .select("title, event_date")
+          .eq("id", booking.event_id)
+          .single();
+        
+        if (eventData) {
+          enhancedBooking.event_title = eventData.title;
+          enhancedBooking.event_date = eventData.event_date;
+        }
+        
+        // Get user profile
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", booking.user_id)
+          .single();
+        
+        if (profileData) {
+          enhancedBooking.attendee_name = profileData.full_name;
+        }
+        
+        enhancedBookings.push(enhancedBooking);
+      }
+      
+      return enhancedBookings;
     },
   });
 
@@ -360,9 +357,9 @@ const OrganizerDashboard = () => {
                           <Calendar size={48} />
                         </div>
                       )}
-                      {event.categories && (
+                      {event.category_name && (
                         <Badge className="absolute top-3 right-3 bg-entertainment-600">
-                          {event.categories.name}
+                          {event.category_name}
                         </Badge>
                       )}
                     </div>
@@ -435,11 +432,11 @@ const OrganizerDashboard = () => {
                   <TableBody>
                     {bookings.map((booking) => (
                       <TableRow key={booking.id}>
-                        <TableCell>{booking.events?.title || "Unknown Event"}</TableCell>
-                        <TableCell>{booking.profiles?.full_name || "Anonymous"}</TableCell>
+                        <TableCell>{booking.event_title || "Unknown Event"}</TableCell>
+                        <TableCell>{booking.attendee_name || "Anonymous"}</TableCell>
                         <TableCell>
-                          {booking.events?.event_date ? 
-                            new Date(booking.events.event_date).toLocaleDateString() : 
+                          {booking.event_date ? 
+                            new Date(booking.event_date).toLocaleDateString() : 
                             "N/A"}
                         </TableCell>
                         <TableCell>{booking.seat_count}</TableCell>
@@ -468,3 +465,4 @@ const OrganizerDashboard = () => {
 };
 
 export default OrganizerDashboard;
+
