@@ -20,15 +20,15 @@ const Hero = () => {
       <div className="container mx-auto px-4 pt-20 pb-24 md:pt-32 md:pb-40 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
-            Discover & Book Amazing Entertainment Experiences
+            Create Your Digital Portfolio with Maasta
           </h1>
           <p className="text-lg md:text-xl text-white/80 mb-8 max-w-3xl mx-auto">
-            Connect with top artists, performers, and creative professionals. Browse portfolios, book events, and experience the best of media and entertainment.
+            Showcase your creative work, connect with industry professionals, and advance your career in media and entertainment.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <Button asChild className="bg-white text-entertainment-700 hover:bg-gray-100 hover:text-entertainment-800 border-none text-base px-8 py-6">
-              <Link to="/events">
-                Browse Events
+              <Link to="/artist/create">
+                Create Your Portfolio
               </Link>
             </Button>
             <Button asChild variant="outline" className="border-white text-white hover:bg-white/10 text-base px-8 py-6">

@@ -4,6 +4,7 @@ import Footer from "@/components/layout/Footer";
 import Hero from "@/components/home/Hero";
 import FeaturedArtists from "@/components/home/FeaturedArtists";
 import UpcomingShows from "@/components/home/UpcomingShows";
+import PortfolioFeature from "@/components/home/PortfolioFeature";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 
@@ -13,6 +14,7 @@ const Index = () => {
       <Navbar />
       <main className="flex-grow">
         <Hero />
+        <PortfolioFeature />
         <FeaturedArtists />
         <UpcomingShows />
         
@@ -23,7 +25,7 @@ const Index = () => {
               <div>
                 <h2 className="text-3xl font-semibold mb-4">Are You An Artist?</h2>
                 <p className="text-gray-600 mb-6">
-                  MediaMuse helps artists in the entertainment industry showcase their work, find audiences, 
+                  Maasta helps artists in the entertainment industry showcase their work, find audiences, 
                   and grow their careers. Create your professional portfolio and start booking events today.
                 </p>
                 <ul className="space-y-2 mb-6">
@@ -53,13 +55,13 @@ const Index = () => {
                   </li>
                 </ul>
                 <Button asChild className="bg-entertainment-600 hover:bg-entertainment-700">
-                  <Link to="/artist-signup">Join as an Artist</Link>
+                  <Link to="/artist/create">Join as an Artist</Link>
                 </Button>
               </div>
               <div className="rounded-lg overflow-hidden shadow-xl">
                 <img 
                   src="https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d" 
-                  alt="Artist using MediaMuse platform" 
+                  alt="Artist using Maasta platform" 
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -88,7 +90,7 @@ const Index = () => {
                   </div>
                 </div>
                 <p className="text-gray-600">
-                  "MediaMuse made it so easy to discover new artists in my area. 
+                  "Maasta made it so easy to discover new artists in my area. 
                   I've attended three concerts I found through the platform and each one was amazing!"
                 </p>
                 <div className="flex mt-4">
@@ -125,7 +127,7 @@ const Index = () => {
                   </div>
                 </div>
                 <p className="text-gray-600">
-                  "As an indie filmmaker, having a professional portfolio on MediaMuse has helped me connect with 
+                  "As an indie filmmaker, having a professional portfolio on Maasta has helped me connect with 
                   producers and actors. The booking system is intuitive and has streamlined my workflow."
                 </p>
                 <div className="flex mt-4">
@@ -162,7 +164,7 @@ const Index = () => {
                   </div>
                 </div>
                 <p className="text-gray-600">
-                  "MediaMuse helped me grow my dance workshop attendance by 200% in just three months. 
+                  "Maasta helped me grow my dance workshop attendance by 200% in just three months. 
                   The platform's reach and easy-to-use booking system are game changers for artists!"
                 </p>
                 <div className="flex mt-4">

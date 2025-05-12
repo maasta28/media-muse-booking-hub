@@ -32,8 +32,9 @@ const Navbar = () => {
       <div className="container mx-auto px-4 flex h-16 items-center justify-between">
         <div className="flex items-center">
           <Link to="/" className="flex items-center">
+            <img src="/logo.svg" alt="Maasta Logo" className="h-8 w-8 mr-2" />
             <h1 className="text-2xl font-bold bg-gradient-to-r from-entertainment-600 to-entertainment-400 bg-clip-text text-transparent">
-              MediaMuse
+              Maasta
             </h1>
           </Link>
         </div>
@@ -87,6 +88,9 @@ const Navbar = () => {
                 )}
                 <DropdownMenuItem asChild>
                   <Link to="/bookings">My Bookings</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/artist/create">Create Portfolio</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="text-red-500">
@@ -163,6 +167,13 @@ const Navbar = () => {
                     onClick={toggleMenu}
                   >
                     My Bookings
+                  </Link>
+                  <Link 
+                    to="/artist/create" 
+                    className="text-sm font-medium hover:text-entertainment-600 transition-colors p-2"
+                    onClick={toggleMenu}
+                  >
+                    Create Portfolio
                   </Link>
                   <Button 
                     variant="ghost"
