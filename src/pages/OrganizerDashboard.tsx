@@ -28,7 +28,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
 
-// Simplified types that avoid deep nesting
+// Simplified types to prevent deep nesting issues
 type SimpleEventData = {
   id: string;
   title: string;
@@ -39,11 +39,8 @@ type SimpleEventData = {
   city: string;
   available_seats: number;
   image_url?: string | null;
-  user_id: string;
   category_id: string | null;
   artist_id: string | null;
-  created_at: string | null;
-  updated_at: string | null;
   price_start: number;
   price_end: number | null;
   category_name?: string | null;
@@ -60,7 +57,6 @@ type SimpleBookingData = {
   status: string;
   created_at: string | null;
   booking_date: string | null;
-  updated_at: string | null;
   event_title?: string | null;
   event_date?: string | null;
   attendee_name?: string | null;
@@ -95,68 +91,88 @@ const OrganizerDashboard = () => {
     },
   });
   
-  // Fetch organizer's events
+  // Fetch organizer's events with simplified approach to prevent deep types
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["organizerEvents", session?.user?.id, searchQuery],
     enabled: !!session?.user?.id,
     queryFn: async () => {
       if (!session?.user?.id) return [];
       
-      // First, fetch basic event data
-      let query = supabase
-        .from("events")
-        .select(`
-          id, title, description, event_date, event_time, venue, city,
-          available_seats, image_url, user_id, category_id, artist_id,
-          created_at, updated_at, price_start, price_end
-        `)
-        .eq("user_id", session.user.id);
-      
-      // Apply search filter if provided
-      if (searchQuery) {
-        query = query.ilike("title", `%${searchQuery}%`);
-      }
-      
-      const { data: eventsData, error } = await query.order("event_date", { ascending: true });
-      
-      if (error) throw error;
-      
-      // Extract event data and enhance with additional details
-      const enhancedEvents: SimpleEventData[] = [];
-      
-      // Process each event one by one to avoid deep nesting issues
-      for (const event of eventsData || []) {
-        // Initialize with base event data
-        const enhancedEvent: SimpleEventData = {
-          ...event as SimpleEventData
-        };
+      try {
+        // First, fetch basic event data
+        let query = supabase
+          .from("events")
+          .select(`
+            id, title, description, event_date, event_time, venue, city,
+            available_seats, image_url, category_id, artist_id,
+            created_at, updated_at, price_start, price_end
+          `)
+          .eq("user_id", session.user.id);
         
-        // Get category name if category_id exists
-        if (enhancedEvent.category_id) {
-          const { data: categoryData } = await supabase
-            .from("categories")
-            .select("name")
-            .eq("id", enhancedEvent.category_id)
-            .single();
-          
-          enhancedEvent.category_name = categoryData?.name || null;
+        // Apply search filter if provided
+        if (searchQuery) {
+          query = query.ilike("title", `%${searchQuery}%`);
         }
         
-        // Get artist name if artist_id exists
-        if (enhancedEvent.artist_id) {
-          const { data: artistData } = await supabase
-            .from("artists")
-            .select("name")
-            .eq("id", enhancedEvent.artist_id)
-            .single();
+        const { data: eventsData, error } = await query.order("event_date", { ascending: true });
+        
+        if (error) throw error;
+        
+        if (!eventsData || eventsData.length === 0) return [];
+        
+        // Now enhance events with category and artist names separately
+        const enhancedEvents: SimpleEventData[] = [];
+        
+        for (const event of eventsData) {
+          // Create base event with type safety
+          const enhancedEvent: SimpleEventData = {
+            id: event.id,
+            title: event.title,
+            description: event.description,
+            event_date: event.event_date,
+            event_time: event.event_time,
+            venue: event.venue,
+            city: event.city,
+            available_seats: event.available_seats,
+            image_url: event.image_url,
+            category_id: event.category_id,
+            artist_id: event.artist_id,
+            price_start: event.price_start,
+            price_end: event.price_end,
+            category_name: null,
+            artist_name: null,
+          };
           
-          enhancedEvent.artist_name = artistData?.name || null;
+          // Get category name if category_id exists
+          if (enhancedEvent.category_id) {
+            const { data: categoryData } = await supabase
+              .from("categories")
+              .select("name")
+              .eq("id", enhancedEvent.category_id)
+              .single();
+            
+            enhancedEvent.category_name = categoryData?.name || null;
+          }
+          
+          // Get artist name if artist_id exists
+          if (enhancedEvent.artist_id) {
+            const { data: artistData } = await supabase
+              .from("artists")
+              .select("name")
+              .eq("id", enhancedEvent.artist_id)
+              .single();
+            
+            enhancedEvent.artist_name = artistData?.name || null;
+          }
+          
+          enhancedEvents.push(enhancedEvent);
         }
         
-        enhancedEvents.push(enhancedEvent);
+        return enhancedEvents;
+      } catch (error) {
+        console.error("Error fetching events:", error);
+        return [];
       }
-      
-      return enhancedEvents;
     },
   });
   
@@ -167,51 +183,70 @@ const OrganizerDashboard = () => {
     queryFn: async () => {
       if (!events.length) return [];
       
-      const eventIds = events.map(event => event.id);
-      
-      // Fetch basic booking data
-      const { data: bookingsData, error } = await supabase
-        .from("bookings")
-        .select("id, event_id, user_id, seat_count, total_amount, status, created_at, booking_date, updated_at")
-        .in("event_id", eventIds)
-        .order("created_at", { ascending: false });
-      
-      if (error) throw error;
-      
-      // Enhance booking data with related information
-      const enhancedBookings: SimpleBookingData[] = [];
-      
-      // Process each booking individually to avoid type issues
-      for (const booking of bookingsData || []) {
-        const enhancedBooking: SimpleBookingData = { ...booking as SimpleBookingData };
+      try {
+        const eventIds = events.map(event => event.id);
         
-        // Get event details
-        const { data: eventData } = await supabase
-          .from("events")
-          .select("title, event_date")
-          .eq("id", booking.event_id)
-          .single();
+        // Fetch basic booking data
+        const { data: bookingsData, error } = await supabase
+          .from("bookings")
+          .select("id, event_id, user_id, seat_count, total_amount, status, created_at, booking_date")
+          .in("event_id", eventIds)
+          .order("created_at", { ascending: false });
         
-        if (eventData) {
-          enhancedBooking.event_title = eventData.title;
-          enhancedBooking.event_date = eventData.event_date;
+        if (error) throw error;
+        
+        if (!bookingsData || bookingsData.length === 0) return [];
+        
+        // Enhance booking data with related information
+        const enhancedBookings: SimpleBookingData[] = [];
+        
+        for (const booking of bookingsData) {
+          // Initialize the enhanced booking with known data
+          const enhancedBooking: SimpleBookingData = {
+            id: booking.id,
+            event_id: booking.event_id,
+            user_id: booking.user_id,
+            seat_count: booking.seat_count,
+            total_amount: booking.total_amount,
+            status: booking.status,
+            created_at: booking.created_at,
+            booking_date: booking.booking_date,
+            event_title: null,
+            event_date: null,
+            attendee_name: null,
+          };
+          
+          // Get event details
+          const { data: eventData } = await supabase
+            .from("events")
+            .select("title, event_date")
+            .eq("id", booking.event_id)
+            .single();
+          
+          if (eventData) {
+            enhancedBooking.event_title = eventData.title;
+            enhancedBooking.event_date = eventData.event_date;
+          }
+          
+          // Get user profile
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", booking.user_id)
+            .single();
+          
+          if (profileData) {
+            enhancedBooking.attendee_name = profileData.full_name;
+          }
+          
+          enhancedBookings.push(enhancedBooking);
         }
         
-        // Get user profile
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", booking.user_id)
-          .single();
-        
-        if (profileData) {
-          enhancedBooking.attendee_name = profileData.full_name;
-        }
-        
-        enhancedBookings.push(enhancedBooking);
+        return enhancedBookings;
+      } catch (error) {
+        console.error("Error fetching bookings:", error);
+        return [];
       }
-      
-      return enhancedBookings;
     },
   });
 
@@ -465,4 +500,3 @@ const OrganizerDashboard = () => {
 };
 
 export default OrganizerDashboard;
-
