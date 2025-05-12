@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -28,8 +27,8 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
 
-// Simplified types to prevent deep nesting issues
-type SimpleEventData = {
+// Define simple interface types to prevent deep nesting
+interface SimpleEventData {
   id: string;
   title: string;
   description: string | null;
@@ -45,10 +44,10 @@ type SimpleEventData = {
   price_end: number | null;
   category_name?: string | null;
   artist_name?: string | null;
-};
+}
 
 // Simplified type for bookings
-type SimpleBookingData = {
+interface SimpleBookingData {
   id: string;
   event_id: string;
   user_id: string;
@@ -60,7 +59,7 @@ type SimpleBookingData = {
   event_title?: string | null;
   event_date?: string | null;
   attendee_name?: string | null;
-};
+}
 
 const OrganizerDashboard = () => {
   const navigate = useNavigate();
@@ -91,7 +90,7 @@ const OrganizerDashboard = () => {
     },
   });
   
-  // Fetch organizer's events with simplified approach to prevent deep types
+  // Fetch organizer's events with simplified approach
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["organizerEvents", session?.user?.id, searchQuery],
     enabled: !!session?.user?.id,
@@ -116,15 +115,43 @@ const OrganizerDashboard = () => {
         
         const { data: eventsData, error } = await query.order("event_date", { ascending: true });
         
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching events:", error);
+          return [];
+        }
         
         if (!eventsData || eventsData.length === 0) return [];
         
-        // Now enhance events with category and artist names separately
+        // Process events with category and artist names
         const enhancedEvents: SimpleEventData[] = [];
         
         for (const event of eventsData) {
-          // Create base event with type safety
+          let categoryName: string | null = null;
+          let artistName: string | null = null;
+          
+          // Get category name if category_id exists
+          if (event.category_id) {
+            const { data: categoryData } = await supabase
+              .from("categories")
+              .select("name")
+              .eq("id", event.category_id)
+              .single();
+            
+            categoryName = categoryData?.name || null;
+          }
+          
+          // Get artist name if artist_id exists
+          if (event.artist_id) {
+            const { data: artistData } = await supabase
+              .from("artists")
+              .select("name")
+              .eq("id", event.artist_id)
+              .single();
+            
+            artistName = artistData?.name || null;
+          }
+          
+          // Create enhanced event object with explicit typing
           const enhancedEvent: SimpleEventData = {
             id: event.id,
             title: event.title,
@@ -139,38 +166,16 @@ const OrganizerDashboard = () => {
             artist_id: event.artist_id,
             price_start: event.price_start,
             price_end: event.price_end,
-            category_name: null,
-            artist_name: null,
+            category_name: categoryName,
+            artist_name: artistName,
           };
-          
-          // Get category name if category_id exists
-          if (enhancedEvent.category_id) {
-            const { data: categoryData } = await supabase
-              .from("categories")
-              .select("name")
-              .eq("id", enhancedEvent.category_id)
-              .single();
-            
-            enhancedEvent.category_name = categoryData?.name || null;
-          }
-          
-          // Get artist name if artist_id exists
-          if (enhancedEvent.artist_id) {
-            const { data: artistData } = await supabase
-              .from("artists")
-              .select("name")
-              .eq("id", enhancedEvent.artist_id)
-              .single();
-            
-            enhancedEvent.artist_name = artistData?.name || null;
-          }
           
           enhancedEvents.push(enhancedEvent);
         }
         
         return enhancedEvents;
       } catch (error) {
-        console.error("Error fetching events:", error);
+        console.error("Error processing events:", error);
         return [];
       }
     },
@@ -193,28 +198,20 @@ const OrganizerDashboard = () => {
           .in("event_id", eventIds)
           .order("created_at", { ascending: false });
         
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching bookings:", error);
+          return [];
+        }
         
         if (!bookingsData || bookingsData.length === 0) return [];
         
-        // Enhance booking data with related information
+        // Process booking data with related information
         const enhancedBookings: SimpleBookingData[] = [];
         
         for (const booking of bookingsData) {
-          // Initialize the enhanced booking with known data
-          const enhancedBooking: SimpleBookingData = {
-            id: booking.id,
-            event_id: booking.event_id,
-            user_id: booking.user_id,
-            seat_count: booking.seat_count,
-            total_amount: booking.total_amount,
-            status: booking.status,
-            created_at: booking.created_at,
-            booking_date: booking.booking_date,
-            event_title: null,
-            event_date: null,
-            attendee_name: null,
-          };
+          let eventTitle: string | null = null;
+          let eventDate: string | null = null;
+          let attendeeName: string | null = null;
           
           // Get event details
           const { data: eventData } = await supabase
@@ -224,8 +221,8 @@ const OrganizerDashboard = () => {
             .single();
           
           if (eventData) {
-            enhancedBooking.event_title = eventData.title;
-            enhancedBooking.event_date = eventData.event_date;
+            eventTitle = eventData.title;
+            eventDate = eventData.event_date;
           }
           
           // Get user profile
@@ -236,15 +233,30 @@ const OrganizerDashboard = () => {
             .single();
           
           if (profileData) {
-            enhancedBooking.attendee_name = profileData.full_name;
+            attendeeName = profileData.full_name;
           }
+          
+          // Create enhanced booking with explicit typing
+          const enhancedBooking: SimpleBookingData = {
+            id: booking.id,
+            event_id: booking.event_id,
+            user_id: booking.user_id,
+            seat_count: booking.seat_count,
+            total_amount: booking.total_amount,
+            status: booking.status,
+            created_at: booking.created_at,
+            booking_date: booking.booking_date,
+            event_title: eventTitle,
+            event_date: eventDate,
+            attendee_name: attendeeName,
+          };
           
           enhancedBookings.push(enhancedBooking);
         }
         
         return enhancedBookings;
       } catch (error) {
-        console.error("Error fetching bookings:", error);
+        console.error("Error processing bookings:", error);
         return [];
       }
     },
