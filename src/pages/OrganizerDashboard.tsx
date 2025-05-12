@@ -92,14 +92,15 @@ const OrganizerDashboard = () => {
     },
   });
   
-  // Fetch organizer's events with simpler approach
+  // Fetch organizer's events - simplified query to avoid deep type nesting
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["organizerEvents", session?.user?.id, searchQuery],
     enabled: !!session?.user?.id,
     queryFn: async () => {
       if (!session?.user?.id) return [];
       
-      try {
+      // This ensures we're not returning a complex recursive type
+      const fetchEvents = async (): Promise<SimpleEventData[]> => {
         // First, fetch basic event data
         let query = supabase
           .from("events")
@@ -173,21 +174,21 @@ const OrganizerDashboard = () => {
         }
         
         return enhancedEvents;
-      } catch (error) {
-        console.error("Error processing events:", error);
-        return [];
-      }
+      };
+      
+      return fetchEvents();
     },
   });
   
-  // Fetch bookings for organizer's events
+  // Fetch bookings for organizer's events - simplified to avoid deep type nesting
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
-    queryKey: ["organizerBookings", session?.user?.id, events?.map(e => e.id).join()],
-    enabled: !!session?.user?.id && events && events.length > 0,
+    queryKey: ["organizerBookings", session?.user?.id, events ? events.map(e => e.id).join("") : ""],
+    enabled: !!session?.user?.id && Array.isArray(events) && events.length > 0,
     queryFn: async () => {
-      if (!events || !events.length) return [];
+      if (!Array.isArray(events) || !events.length) return [];
       
-      try {
+      // Use explicit function return type to avoid deep nesting
+      const fetchBookings = async (): Promise<SimpleBookingData[]> => {
         const eventIds = events.map(event => event.id);
         
         // Fetch basic booking data
@@ -235,7 +236,6 @@ const OrganizerDashboard = () => {
             attendeeName = profileData.full_name;
           }
           
-          // Create enhanced booking
           enhancedBookings.push({
             id: booking.id,
             event_id: booking.event_id,
@@ -252,10 +252,9 @@ const OrganizerDashboard = () => {
         }
         
         return enhancedBookings;
-      } catch (error) {
-        console.error("Error processing bookings:", error);
-        return [];
-      }
+      };
+      
+      return fetchBookings();
     },
   });
 
@@ -279,9 +278,17 @@ const OrganizerDashboard = () => {
   }
   
   // Calculate dashboard stats
-  const upcomingEventsCount = events.filter(event => new Date(event.event_date) >= new Date()).length;
-  const totalAttendeesCount = bookings.reduce((sum, booking) => sum + booking.seat_count, 0);
-  const totalRevenue = bookings.reduce((sum, booking) => sum + booking.total_amount, 0);
+  const upcomingEventsCount = Array.isArray(events) 
+    ? events.filter(event => new Date(event.event_date) >= new Date()).length
+    : 0;
+    
+  const totalAttendeesCount = Array.isArray(bookings)
+    ? bookings.reduce((sum, booking) => sum + booking.seat_count, 0)
+    : 0;
+    
+  const totalRevenue = Array.isArray(bookings)
+    ? bookings.reduce((sum, booking) => sum + booking.total_amount, 0)
+    : 0;
   
   return (
     <div className="min-h-screen flex flex-col">
@@ -375,7 +382,7 @@ const OrganizerDashboard = () => {
                 <Loader2 className="h-8 w-8 animate-spin mx-auto text-entertainment-600" />
                 <p className="mt-2 text-gray-600">Loading events...</p>
               </div>
-            ) : events.length === 0 ? (
+            ) : !Array.isArray(events) || events.length === 0 ? (
               <div className="text-center py-12 border rounded-lg bg-gray-50">
                 <p className="text-gray-600">You haven't created any events yet.</p>
                 <Button
@@ -456,7 +463,7 @@ const OrganizerDashboard = () => {
                 <Loader2 className="h-8 w-8 animate-spin mx-auto text-entertainment-600" />
                 <p className="mt-2 text-gray-600">Loading bookings...</p>
               </div>
-            ) : bookings.length === 0 ? (
+            ) : !Array.isArray(bookings) || bookings.length === 0 ? (
               <div className="text-center py-12 border rounded-lg bg-gray-50">
                 <p className="text-gray-600">No bookings found for your events.</p>
               </div>
