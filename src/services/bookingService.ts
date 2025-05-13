@@ -28,7 +28,7 @@ export const createBooking = async (bookingData: BookingFormData) => {
       throw new Error(`Failed to create booking: ${error.message}`);
     }
 
-    // Update available seats in the event
+    // Update available seats in the event using a direct update with a calculation
     const { error: updateError } = await supabase
       .from('events')
       .update({ 

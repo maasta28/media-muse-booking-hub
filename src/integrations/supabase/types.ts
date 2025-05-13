@@ -156,6 +156,7 @@ export type Database = {
           event_time: string
           id: string
           image_url: string | null
+          organizer_id: string | null
           price_end: number | null
           price_start: number
           title: string
@@ -173,6 +174,7 @@ export type Database = {
           event_time: string
           id?: string
           image_url?: string | null
+          organizer_id?: string | null
           price_end?: number | null
           price_start: number
           title: string
@@ -190,6 +192,7 @@ export type Database = {
           event_time?: string
           id?: string
           image_url?: string | null
+          organizer_id?: string | null
           price_end?: number | null
           price_start?: number
           title?: string
@@ -295,7 +298,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      decrement_seats: {
+        Args: { event_id_param: string; seats_to_remove: number }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never

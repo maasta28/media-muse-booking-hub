@@ -136,17 +136,3 @@ export const fetchCategories = async () => {
     throw error;
   }
 };
-
-/**
- * Creates a RPC function in Supabase to safely decrement available seats
- * This should be run as an SQL migration and not called directly
- */
-export const createDecrementSeatsFunction = async () => {
-  const { error } = await supabase
-    .rpc('create_decrement_seats_function');
-
-  if (error) {
-    console.error("Error creating decrement_seats function:", error);
-    throw new Error(`Failed to create function: ${error.message}`);
-  }
-};

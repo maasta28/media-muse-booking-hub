@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,7 +25,6 @@ type EventType = {
   available_seats: number;
   price_start: number;
   price_end: number | null;
-  bookings?: BookingType[];
 };
 
 type BookingType = {
@@ -37,6 +35,15 @@ type BookingType = {
   total_amount: number;
   status: string;
   booking_date: string;
+  profiles?: {
+    full_name: string | null;
+    avatar_url: string | null;
+  } | null;
+  events?: {
+    title: string;
+    venue: string;
+    event_date: string;
+  } | null;
 };
 
 const OrganizerDashboard = () => {
@@ -70,7 +77,7 @@ const OrganizerDashboard = () => {
 
   // Fetch bookings for the organizer's events
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
-    queryKey: ["organizerBookings", user?.id],
+    queryKey: ["organizerBookings", user?.id, events],
     queryFn: async () => {
       if (!user?.id || !events.length) return [];
       
