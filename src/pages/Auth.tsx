@@ -14,7 +14,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -35,6 +36,8 @@ const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>("login");
+  const [emailConfirmationError, setEmailConfirmationError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   
   // Check if user is already logged in
   const { data: session, isLoading: sessionLoading } = useQuery({
@@ -65,6 +68,9 @@ const Auth = () => {
 
   const handleLogin = async (values: z.infer<typeof loginSchema>) => {
     setIsLoading(true);
+    setEmailConfirmationError(false);
+    setErrorMessage("");
+    
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email: values.email,
@@ -72,15 +78,41 @@ const Auth = () => {
       });
 
       if (error) {
+        if (error.message.includes("Email not confirmed")) {
+          setEmailConfirmationError(true);
+          throw new Error("Email not confirmed. Please check your inbox for a confirmation email or click the button below to resend.");
+        }
         throw error;
       }
 
       toast.success("Successfully logged in");
       navigate("/");
     } catch (error: any) {
+      setErrorMessage(error.message);
       toast.error(error.message || "Failed to log in. Please try again.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    const email = loginForm.getValues("email");
+    if (!email) {
+      toast.error("Please enter your email address first");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+      });
+
+      if (error) throw error;
+      
+      toast.success("Confirmation email sent. Please check your inbox.");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send confirmation email");
     }
   };
 
@@ -102,10 +134,10 @@ const Auth = () => {
 
       // If it's an organizer, redirect to onboarding
       if (values.isOrganizer) {
-        toast.success("Account created! Please complete your organizer profile.");
+        toast.success("Account created! Please check your email for confirmation and complete your organizer profile.");
         navigate("/organizer/onboarding");
       } else {
-        toast.success("Account created successfully!");
+        toast.success("Account created successfully! Please check your email for confirmation.");
         navigate("/");
       }
     } catch (error: any) {
@@ -146,6 +178,29 @@ const Auth = () => {
             </TabsList>
             
             <TabsContent value="login">
+              {emailConfirmationError && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Email not confirmed. Please check your inbox or{" "}
+                    <Button 
+                      variant="link" 
+                      className="p-0 h-auto text-white underline" 
+                      onClick={handleResendConfirmation}
+                    >
+                      resend confirmation email
+                    </Button>.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
+              {errorMessage && !emailConfirmationError && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+              )}
+              
               <Form {...loginForm}>
                 <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
                   <FormField

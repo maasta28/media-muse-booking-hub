@@ -4,3 +4,10 @@ project_id = "rnsxnoirjroduatqiaje"
 [storage]
 [storage.company_logos]
 public = true
+
+[storage.portfolio-images]
+public = true
+
+[storage.portfolio-videos]
+public = true
+
