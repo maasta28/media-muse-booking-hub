@@ -1,515 +1,321 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/hooks/useAuth";
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
-import { Loader2, Plus, Calendar, Clock, MapPin, Users, Search } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CalendarDays, Users, TicketCheck, PlusCircle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
-// Define simpler interface types to prevent deep nesting
-interface SimpleEventData {
+// Define proper types to avoid deep instantiation
+type EventType = {
   id: string;
   title: string;
-  description: string | null;
-  event_date: string;
-  event_time: string;
   venue: string;
-  city: string;
+  event_date: string;
   available_seats: number;
-  image_url?: string | null;
-  category_id: string | null;
-  artist_id: string | null;
   price_start: number;
   price_end: number | null;
-  category_name?: string | null;
-  artist_name?: string | null;
-}
+  bookings?: BookingType[];
+};
 
-// Simplified type for bookings
-interface SimpleBookingData {
+type BookingType = {
   id: string;
-  event_id: string;
   user_id: string;
+  event_id: string;
   seat_count: number;
   total_amount: number;
   status: string;
-  created_at: string | null;
-  booking_date: string | null;
-  event_title?: string | null;
-  event_date?: string | null;
-  attendee_name?: string | null;
-}
+  booking_date: string;
+};
 
 const OrganizerDashboard = () => {
+  const { user, profile, isLoading: authLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState("events");
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
-  
-  // Check if user is logged in
-  const { data: session, isLoading: sessionLoading } = useQuery({
-    queryKey: ["session"],
+
+  // Fetch events created by the organizer
+  const { data: events = [], isLoading: eventsLoading } = useQuery({
+    queryKey: ["organizerEvents", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.auth.getSession();
-      return data.session;
-    },
-  });
-  
-  // Fetch organizer profile
-  const { data: profile, isLoading: profileLoading } = useQuery({
-    queryKey: ["organizerProfile", session?.user?.id],
-    enabled: !!session?.user?.id,
-    queryFn: async () => {
-      if (!session?.user?.id) return null;
+      if (!user?.id) return [];
       
       const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", session.user.id)
-        .single();
+        .from("events")
+        .select(`
+          *,
+          categories:category_id (name)
+        `)
+        .eq("organizer_id", user.id);
+
+      if (error) {
+        console.error("Error fetching organizer events:", error);
+        throw new Error(error.message);
+      }
       
-      if (error) throw error;
-      return data;
+      return data || [];
     },
+    enabled: !!user?.id && !!profile?.is_organizer,
   });
-  
-  // Fetch organizer's events - simplified query to avoid deep type nesting
-  const { data: events = [], isLoading: eventsLoading } = useQuery({
-    queryKey: ["organizerEvents", session?.user?.id, searchQuery],
-    enabled: !!session?.user?.id,
-    queryFn: async () => {
-      if (!session?.user?.id) return [];
-      
-      // This ensures we're not returning a complex recursive type
-      const fetchEvents = async (): Promise<SimpleEventData[]> => {
-        // First, fetch basic event data
-        let query = supabase
-          .from("events")
-          .select(`
-            id, title, description, event_date, event_time, venue, city,
-            available_seats, image_url, category_id, artist_id,
-            price_start, price_end
-          `)
-          .eq("user_id", session.user.id);
-        
-        // Apply search filter if provided
-        if (searchQuery) {
-          query = query.ilike("title", `%${searchQuery}%`);
-        }
-        
-        const { data: eventsData, error } = await query.order("event_date", { ascending: true });
-        
-        if (error) {
-          console.error("Error fetching events:", error);
-          return [];
-        }
-        
-        if (!eventsData || eventsData.length === 0) return [];
-        
-        // Process events with category and artist names
-        const enhancedEvents: SimpleEventData[] = [];
-        
-        for (const event of eventsData) {
-          let categoryName: string | null = null;
-          let artistName: string | null = null;
-          
-          // Get category name if category_id exists
-          if (event.category_id) {
-            const { data: categoryData } = await supabase
-              .from("categories")
-              .select("name")
-              .eq("id", event.category_id)
-              .single();
-            
-            categoryName = categoryData?.name || null;
-          }
-          
-          // Get artist name if artist_id exists
-          if (event.artist_id) {
-            const { data: artistData } = await supabase
-              .from("artists")
-              .select("name")
-              .eq("id", event.artist_id)
-              .single();
-            
-            artistName = artistData?.name || null;
-          }
-          
-          enhancedEvents.push({
-            id: event.id,
-            title: event.title,
-            description: event.description,
-            event_date: event.event_date,
-            event_time: event.event_time,
-            venue: event.venue,
-            city: event.city,
-            available_seats: event.available_seats,
-            image_url: event.image_url,
-            category_id: event.category_id,
-            artist_id: event.artist_id,
-            price_start: event.price_start,
-            price_end: event.price_end,
-            category_name: categoryName,
-            artist_name: artistName,
-          });
-        }
-        
-        return enhancedEvents;
-      };
-      
-      return fetchEvents();
-    },
-  });
-  
-  // Fetch bookings for organizer's events - simplified to avoid deep type nesting
+
+  // Fetch bookings for the organizer's events
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
-    queryKey: ["organizerBookings", session?.user?.id, events ? events.map(e => e.id).join("") : ""],
-    enabled: !!session?.user?.id && Array.isArray(events) && events.length > 0,
+    queryKey: ["organizerBookings", user?.id],
     queryFn: async () => {
-      if (!Array.isArray(events) || !events.length) return [];
+      if (!user?.id || !events.length) return [];
       
-      // Use explicit function return type to avoid deep nesting
-      const fetchBookings = async (): Promise<SimpleBookingData[]> => {
-        const eventIds = events.map(event => event.id);
-        
-        // Fetch basic booking data
-        const { data: bookingsData, error } = await supabase
-          .from("bookings")
-          .select("id, event_id, user_id, seat_count, total_amount, status, created_at, booking_date")
-          .in("event_id", eventIds)
-          .order("created_at", { ascending: false });
-        
-        if (error) {
-          console.error("Error fetching bookings:", error);
-          return [];
-        }
-        
-        if (!bookingsData || bookingsData.length === 0) return [];
-        
-        // Process booking data with related information
-        const enhancedBookings: SimpleBookingData[] = [];
-        
-        for (const booking of bookingsData) {
-          let eventTitle: string | null = null;
-          let eventDate: string | null = null;
-          let attendeeName: string | null = null;
-          
-          // Get event details
-          const { data: eventData } = await supabase
-            .from("events")
-            .select("title, event_date")
-            .eq("id", booking.event_id)
-            .single();
-          
-          if (eventData) {
-            eventTitle = eventData.title;
-            eventDate = eventData.event_date;
-          }
-          
-          // Get user profile
-          const { data: profileData } = await supabase
-            .from("profiles")
-            .select("full_name")
-            .eq("id", booking.user_id)
-            .single();
-          
-          if (profileData) {
-            attendeeName = profileData.full_name;
-          }
-          
-          enhancedBookings.push({
-            id: booking.id,
-            event_id: booking.event_id,
-            user_id: booking.user_id,
-            seat_count: booking.seat_count,
-            total_amount: booking.total_amount,
-            status: booking.status,
-            created_at: booking.created_at,
-            booking_date: booking.booking_date,
-            event_title: eventTitle,
-            event_date: eventDate,
-            attendee_name: attendeeName,
-          });
-        }
-        
-        return enhancedBookings;
-      };
+      const eventIds = events.map(event => event.id);
       
-      return fetchBookings();
+      const { data, error } = await supabase
+        .from("bookings")
+        .select(`
+          *,
+          profiles:user_id (full_name, avatar_url),
+          events:event_id (title, venue, event_date)
+        `)
+        .in("event_id", eventIds);
+
+      if (error) {
+        console.error("Error fetching bookings:", error);
+        throw new Error(error.message);
+      }
+      
+      return data || [];
     },
+    enabled: !!user?.id && !!profile?.is_organizer && events.length > 0,
   });
 
-  if (sessionLoading || profileLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-entertainment-600" />
-      </div>
-    );
-  }
-
-  if (!session) {
-    navigate("/auth");
-    return null;
-  }
-
-  if (profile && !profile.is_organizer) {
-    toast.error("You don't have organizer privileges");
-    navigate("/");
-    return null;
-  }
-  
   // Calculate dashboard stats
-  const upcomingEventsCount = Array.isArray(events) 
-    ? events.filter(event => new Date(event.event_date) >= new Date()).length
-    : 0;
-    
-  const totalAttendeesCount = Array.isArray(bookings)
-    ? bookings.reduce((sum, booking) => sum + booking.seat_count, 0)
-    : 0;
-    
-  const totalRevenue = Array.isArray(bookings)
-    ? bookings.reduce((sum, booking) => sum + booking.total_amount, 0)
-    : 0;
-  
+  const dashboardStats = {
+    totalEvents: events.length,
+    totalBookings: bookings.length,
+    totalAttendees: bookings.reduce((sum, booking) => sum + (booking.seat_count || 0), 0),
+    upcomingEvents: events.filter(event => new Date(event.event_date) > new Date()).length,
+  };
+
+  // Redirect if user is not an organizer
+  React.useEffect(() => {
+    if (!authLoading && (!user || !profile?.is_organizer)) {
+      navigate("/organizer/onboarding");
+    }
+  }, [user, profile, authLoading, navigate]);
+
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
+      
       <main className="flex-grow container mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+        <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">Organizer Dashboard</h1>
-            {profile && (
-              <p className="text-gray-600">
-                {profile.company_name || "Your Organization"}
-              </p>
-            )}
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <p className="text-gray-600">Manage your events and bookings</p>
           </div>
-          
           <Button 
+            className="bg-entertainment-600 hover:bg-entertainment-700 flex items-center gap-2"
             onClick={() => navigate("/event/create")}
-            className="mt-4 md:mt-0 bg-entertainment-600 hover:bg-entertainment-700"
           >
-            <Plus size={18} className="mr-1" />
-            Create New Event
+            <PlusCircle size={18} />
+            Create Event
           </Button>
         </div>
         
-        {/* Dashboard Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-500">
-                Upcoming Events
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-baseline">
-                <div className="text-3xl font-bold">{upcomingEventsCount}</div>
-                <div className="ml-2 text-sm text-gray-500">events</div>
+            <CardContent className="flex items-center p-6">
+              <div className="bg-entertainment-50 p-3 rounded-full mr-4">
+                <CalendarDays className="h-6 w-6 text-entertainment-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Total Events</p>
+                <h3 className="text-2xl font-bold">{dashboardStats.totalEvents}</h3>
               </div>
             </CardContent>
           </Card>
           
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-500">
-                Total Attendees
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-baseline">
-                <div className="text-3xl font-bold">{totalAttendeesCount}</div>
-                <div className="ml-2 text-sm text-gray-500">people</div>
+            <CardContent className="flex items-center p-6">
+              <div className="bg-blue-50 p-3 rounded-full mr-4">
+                <TicketCheck className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Total Bookings</p>
+                <h3 className="text-2xl font-bold">{dashboardStats.totalBookings}</h3>
               </div>
             </CardContent>
           </Card>
           
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-500">
-                Total Revenue
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-baseline">
-                <div className="text-3xl font-bold">${totalRevenue.toFixed(2)}</div>
+            <CardContent className="flex items-center p-6">
+              <div className="bg-green-50 p-3 rounded-full mr-4">
+                <Users className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Total Attendees</p>
+                <h3 className="text-2xl font-bold">{dashboardStats.totalAttendees}</h3>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="flex items-center p-6">
+              <div className="bg-purple-50 p-3 rounded-full mr-4">
+                <CalendarDays className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Upcoming</p>
+                <h3 className="text-2xl font-bold">{dashboardStats.upcomingEvents}</h3>
               </div>
             </CardContent>
           </Card>
         </div>
         
-        <Tabs defaultValue="events" className="w-full">
+        {/* Main Content Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
-            <TabsTrigger value="events">My Events</TabsTrigger>
+            <TabsTrigger value="events">Events</TabsTrigger>
             <TabsTrigger value="bookings">Bookings</TabsTrigger>
           </TabsList>
           
           <TabsContent value="events">
-            <div className="mb-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <Input
-                  type="search"
-                  placeholder="Search events..."
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-            
-            {eventsLoading ? (
-              <div className="text-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto text-entertainment-600" />
-                <p className="mt-2 text-gray-600">Loading events...</p>
-              </div>
-            ) : !Array.isArray(events) || events.length === 0 ? (
-              <div className="text-center py-12 border rounded-lg bg-gray-50">
-                <p className="text-gray-600">You haven't created any events yet.</p>
-                <Button
-                  onClick={() => navigate("/event/create")}
-                  className="mt-4 bg-entertainment-600 hover:bg-entertainment-700"
-                >
-                  Create Your First Event
-                </Button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {events.map((event) => (
-                  <Card key={event.id} className="overflow-hidden h-full flex flex-col">
-                    <div className="relative h-48 bg-gray-200">
-                      {event.image_url ? (
-                        <img 
-                          src={event.image_url} 
-                          alt={event.title} 
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="h-full flex items-center justify-center bg-entertainment-100 text-entertainment-400">
-                          <Calendar size={48} />
-                        </div>
-                      )}
-                      {event.category_name && (
-                        <Badge className="absolute top-3 right-3 bg-entertainment-600">
-                          {event.category_name}
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    <CardHeader>
-                      <CardTitle className="line-clamp-1">{event.title}</CardTitle>
-                      <CardDescription className="line-clamp-2">{event.description}</CardDescription>
-                    </CardHeader>
-                    
-                    <CardContent className="flex-grow">
-                      <div className="space-y-2 text-sm text-gray-600">
-                        <div className="flex items-center">
-                          <Calendar size={16} className="mr-2" />
-                          <span>{new Date(event.event_date).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <Clock size={16} className="mr-2" />
-                          <span>{event.event_time}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <MapPin size={16} className="mr-2" />
-                          <span className="line-clamp-1">{event.venue}, {event.city}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <Users size={16} className="mr-2" />
-                          <span>{event.available_seats} seats available</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                    
-                    <CardFooter className="border-t pt-4">
-                      <div className="flex justify-between w-full">
-                        <Link to={`/event/${event.id}`}>
-                          <Button variant="outline" size="sm">View Details</Button>
-                        </Link>
-                        <Link to={`/event/edit/${event.id}`}>
-                          <Button size="sm">Edit Event</Button>
-                        </Link>
-                      </div>
-                    </CardFooter>
-                  </Card>
-                ))}
-              </div>
-            )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Your Events</CardTitle>
+                <CardDescription>Manage and track all your events</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {eventsLoading ? (
+                  <div className="text-center py-4">Loading events...</div>
+                ) : events.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500 mb-4">You haven't created any events yet</p>
+                    <Button 
+                      onClick={() => navigate("/event/create")}
+                      className="bg-entertainment-600 hover:bg-entertainment-700"
+                    >
+                      Create Your First Event
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-3 px-4">Event Name</th>
+                          <th className="text-left py-3 px-4">Date</th>
+                          <th className="text-left py-3 px-4">Venue</th>
+                          <th className="text-left py-3 px-4">Available Seats</th>
+                          <th className="text-left py-3 px-4">Price</th>
+                          <th className="text-left py-3 px-4">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {events.map((event) => (
+                          <tr key={event.id} className="border-b hover:bg-gray-50">
+                            <td className="py-3 px-4 font-medium">{event.title}</td>
+                            <td className="py-3 px-4">
+                              {new Date(event.event_date).toLocaleDateString()}
+                            </td>
+                            <td className="py-3 px-4">{event.venue}</td>
+                            <td className="py-3 px-4">{event.available_seats}</td>
+                            <td className="py-3 px-4">
+                              ${event.price_start}
+                              {event.price_end && event.price_end > event.price_start
+                                ? ` - $${event.price_end}`
+                                : ""}
+                            </td>
+                            <td className="py-3 px-4">
+                              <Link to={`/event/${event.id}`}>
+                                <Button variant="outline" size="sm">View</Button>
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
           
           <TabsContent value="bookings">
-            {bookingsLoading ? (
-              <div className="text-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto text-entertainment-600" />
-                <p className="mt-2 text-gray-600">Loading bookings...</p>
-              </div>
-            ) : !Array.isArray(bookings) || bookings.length === 0 ? (
-              <div className="text-center py-12 border rounded-lg bg-gray-50">
-                <p className="text-gray-600">No bookings found for your events.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Event</TableHead>
-                      <TableHead>Attendee</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Seats</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {bookings.map((booking) => (
-                      <TableRow key={booking.id}>
-                        <TableCell>{booking.event_title || "Unknown Event"}</TableCell>
-                        <TableCell>{booking.attendee_name || "Anonymous"}</TableCell>
-                        <TableCell>
-                          {booking.event_date ? 
-                            new Date(booking.event_date).toLocaleDateString() : 
-                            "N/A"}
-                        </TableCell>
-                        <TableCell>{booking.seat_count}</TableCell>
-                        <TableCell>${booking.total_amount.toFixed(2)}</TableCell>
-                        <TableCell>
-                          <Badge className={
-                            booking.status === "confirmed" ? "bg-green-500" : 
-                            booking.status === "pending" ? "bg-yellow-500" : 
-                            "bg-red-500"
-                          }>
-                            {booking.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Booking Requests</CardTitle>
+                <CardDescription>Manage and track bookings for your events</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {bookingsLoading ? (
+                  <div className="text-center py-4">Loading bookings...</div>
+                ) : bookings.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">No bookings for your events yet</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-3 px-4">Booking ID</th>
+                          <th className="text-left py-3 px-4">Event</th>
+                          <th className="text-left py-3 px-4">Customer</th>
+                          <th className="text-left py-3 px-4">Seats</th>
+                          <th className="text-left py-3 px-4">Total</th>
+                          <th className="text-left py-3 px-4">Status</th>
+                          <th className="text-left py-3 px-4">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bookings.map((booking) => (
+                          <tr key={booking.id} className="border-b hover:bg-gray-50">
+                            <td className="py-3 px-4 font-mono text-sm">{booking.id.slice(0, 8)}</td>
+                            <td className="py-3 px-4 font-medium">
+                              {booking.events?.title || "Unknown event"}
+                            </td>
+                            <td className="py-3 px-4">{booking.profiles?.full_name || "Anonymous"}</td>
+                            <td className="py-3 px-4">{booking.seat_count}</td>
+                            <td className="py-3 px-4">${booking.total_amount}</td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                                booking.status === "confirmed" 
+                                  ? "bg-green-100 text-green-800" 
+                                  : booking.status === "pending"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-red-100 text-red-800"
+                              }`}>
+                                {booking.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm">
+                              {new Date(booking.booking_date).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
+      
       <Footer />
     </div>
   );

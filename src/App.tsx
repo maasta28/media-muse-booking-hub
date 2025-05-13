@@ -10,7 +10,9 @@ import ArtistPortfolio from "./pages/ArtistPortfolio";
 import ArtistForm from "./pages/ArtistForm";
 import Artists from "./pages/Artists";
 import EventDetails from "./pages/EventDetails";
+import EventCreate from "./pages/EventCreate";
 import Events from "./pages/Events";
+import AuditionEvents from "./pages/AuditionEvents";
 import Auth from "./pages/Auth";
 import OrganizerOnboarding from "./pages/OrganizerOnboarding";
 import OrganizerDashboard from "./pages/OrganizerDashboard";
@@ -33,7 +35,9 @@ const App = () => (
             <Route path="/artist/edit/:id" element={<ArtistForm />} />
             <Route path="/artists" element={<Artists />} />
             <Route path="/event/:id" element={<EventDetails />} />
+            <Route path="/event/create" element={<EventCreate />} />
             <Route path="/events" element={<Events />} />
+            <Route path="/auditions" element={<AuditionEvents />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/organizer/onboarding" element={<OrganizerOnboarding />} />
             <Route path="/organizer/dashboard" element={<OrganizerDashboard />} />

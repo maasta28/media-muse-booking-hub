@@ -91,6 +91,31 @@ export const fetchEventById = async (id: string) => {
 };
 
 /**
+ * Creates a new event
+ * @param eventData The event data to create
+ * @returns Promise with the created event data
+ */
+export const createEvent = async (eventData: any) => {
+  try {
+    const { data, error } = await supabase
+      .from('events')
+      .insert(eventData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating event:", error);
+      throw new Error(`Failed to create event: ${error.message}`);
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in createEvent:", error);
+    throw error;
+  }
+};
+
+/**
  * Fetches distinct categories for filtering
  * @returns Promise with categories data
  */
@@ -109,5 +134,19 @@ export const fetchCategories = async () => {
   } catch (error) {
     console.error("Error in fetchCategories:", error);
     throw error;
+  }
+};
+
+/**
+ * Creates a RPC function in Supabase to safely decrement available seats
+ * This should be run as an SQL migration and not called directly
+ */
+export const createDecrementSeatsFunction = async () => {
+  const { error } = await supabase
+    .rpc('create_decrement_seats_function');
+
+  if (error) {
+    console.error("Error creating decrement_seats function:", error);
+    throw new Error(`Failed to create function: ${error.message}`);
   }
 };
