@@ -15,12 +15,25 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { fetchArtistById, fetchPortfolioItems, savePortfolioItem, uploadPortfolioMedia, deletePortfolioItem, PortfolioItem } from "@/services/artistService";
+import { 
+  fetchArtistById, 
+  fetchPortfolioItems, 
+  savePortfolioItem, 
+  uploadPortfolioMedia, 
+  deletePortfolioItem, 
+  PortfolioItem 
+} from "@/services/artistService";
+import { 
+  checkPortfolioLimits,
+  validateFileSize,
+  getMediaCounts 
+} from "@/services/portfolioService";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { User, Calendar, Clock, MapPin, Image, Video, Link, Edit, Trash2, Plus, Instagram, Linkedin, Facebook } from "lucide-react";
+import { User, Calendar, Clock, MapPin, Image, Video, Link, Edit, Trash2, Plus, Instagram, Linkedin, Facebook, Youtube, ExternalLink, AlertCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Form schema for portfolio item
 const portfolioItemSchema = z.object({
@@ -46,6 +59,8 @@ const ArtistPortfolio = () => {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [limitError, setLimitError] = useState<string | null>(null);
+  const [mediaCounts, setMediaCounts] = useState({ images: 0, videos: 0 });
 
   // Fetch artist data
   const { 
@@ -61,10 +76,16 @@ const ArtistPortfolio = () => {
   const {
     data: portfolioItems = [],
     isLoading: isLoadingItems,
+    refetch: refetchPortfolioItems
   } = useQuery({
     queryKey: ["portfolio-items", id],
     queryFn: () => fetchPortfolioItems(id!),
     enabled: !!id,
+    onSuccess: (data) => {
+      const images = data.filter(item => item.media_type === 'image').length;
+      const videos = data.filter(item => item.media_type === 'video').length;
+      setMediaCounts({ images, videos });
+    }
   });
 
   // Check if the user is allowed to edit this profile
@@ -84,10 +105,34 @@ const ArtistPortfolio = () => {
   // Save portfolio item mutation
   const saveItemMutation = useMutation({
     mutationFn: async (values: PortfolioItemFormValues) => {
+      if (!user) {
+        throw new Error("You must be logged in to save portfolio items");
+      }
+
+      // Check upload limits if this is a new item
+      if (!currentItem) {
+        if (values.media_type === 'image' || values.media_type === 'video') {
+          const canUpload = await checkPortfolioLimits(id!, values.media_type);
+          if (!canUpload) {
+            const errorMessage = `You can only upload up to ${values.media_type === 'image' ? '3 images' : '3 videos'}. Please remove existing files to upload new ones.`;
+            setLimitError(errorMessage);
+            throw new Error(errorMessage);
+          }
+        }
+      }
+
+      // Reset any previous errors
+      setLimitError(null);
+      
       // If there's a new media file for image or video type, upload it first
       let mediaUrl = values.media_url;
       
       if (mediaFile && values.media_type === "image") {
+        // Validate file size
+        if (!validateFileSize(mediaFile, 'image')) {
+          throw new Error("Image file size cannot exceed 5MB");
+        }
+        
         setUploadProgress(10);
         try {
           mediaUrl = await uploadPortfolioMedia(mediaFile, 'portfolio-images');
@@ -97,6 +142,11 @@ const ArtistPortfolio = () => {
           throw error;
         }
       } else if (mediaFile && values.media_type === "video") {
+        // Validate file size
+        if (!validateFileSize(mediaFile, 'video')) {
+          throw new Error("Video file size cannot exceed 50MB");
+        }
+        
         setUploadProgress(10);
         try {
           mediaUrl = await uploadPortfolioMedia(mediaFile, 'portfolio-videos');
@@ -126,6 +176,7 @@ const ArtistPortfolio = () => {
       setUploadProgress(0);
       portfolioForm.reset();
       toast.success("Portfolio item saved successfully");
+      refetchPortfolioItems();
     },
     onError: (error: Error) => {
       setUploadProgress(0);
@@ -139,6 +190,7 @@ const ArtistPortfolio = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio-items", id] });
       toast.success("Portfolio item deleted successfully");
+      refetchPortfolioItems();
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to delete portfolio item");
@@ -146,6 +198,19 @@ const ArtistPortfolio = () => {
   });
 
   const openPortfolioDialog = (item?: PortfolioItem) => {
+    setLimitError(null);
+    
+    if (!user) {
+      toast.error("Please sign in to manage your portfolio");
+      navigate("/auth");
+      return;
+    }
+
+    if (id !== user.id) {
+      toast.error("You can only edit your own portfolio");
+      return;
+    }
+
     if (item) {
       setCurrentItem(item);
       portfolioForm.reset({
@@ -174,6 +239,29 @@ const ArtistPortfolio = () => {
   const handleMediaFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // Validate file type
+    const mediaType = portfolioForm.getValues("media_type");
+    if (mediaType === 'image' && !file.type.startsWith('image/')) {
+      toast.error("Please select a valid image file (JPG, PNG)");
+      return;
+    }
+    if (mediaType === 'video' && !file.type.startsWith('video/')) {
+      toast.error("Please select a valid video file (MP4, WebM)");
+      return;
+    }
+    
+    // Validate file size
+    const isValidSize = validateFileSize(
+      file, 
+      mediaType as 'image' | 'video'
+    );
+    if (!isValidSize) {
+      toast.error(
+        `File size is too large. Maximum size allowed is ${mediaType === 'image' ? '5MB' : '50MB'}`
+      );
+      return;
+    }
     
     setMediaFile(file);
     
@@ -205,6 +293,15 @@ const ArtistPortfolio = () => {
     setMediaPreview(null);
     setVideoUrl(null);
     portfolioForm.setValue("media_url", "");
+    setLimitError(null);
+    
+    // Check limits for the selected media type
+    if ((value === 'image' && mediaCounts.images >= 3) || 
+        (value === 'video' && mediaCounts.videos >= 3)) {
+      setLimitError(
+        `You can only upload up to 3 ${value}s. Please remove existing files to upload new ones.`
+      );
+    }
     
     // If switching to social, set a default social platform
     if (value === "social") {
@@ -223,8 +320,10 @@ const ArtistPortfolio = () => {
         return <Facebook className="w-6 h-6 text-maasta-secondary" />;
       case 'linkedin':
         return <Linkedin className="w-6 h-6 text-maasta-secondary" />;
+      case 'youtube':
+        return <Youtube className="w-6 h-6 text-maasta-secondary" />;
       default:
-        return <Link className="w-6 h-6 text-maasta-secondary" />;
+        return <ExternalLink className="w-6 h-6 text-maasta-secondary" />;
     }
   };
 
@@ -412,6 +511,41 @@ const ArtistPortfolio = () => {
                   )}
                 </div>
                 
+                {!user && (
+                  <Alert variant="default" className="mb-6 bg-blue-50 border-blue-200">
+                    <AlertCircle className="h-4 w-4 text-blue-500" />
+                    <AlertDescription className="text-blue-700">
+                      <span className="font-semibold">You are viewing this portfolio as a guest.</span> To create your own portfolio, please{' '}
+                      <Button 
+                        variant="link" 
+                        onClick={() => navigate('/auth')} 
+                        className="p-0 h-auto text-blue-600 font-semibold"
+                      >
+                        sign in or register
+                      </Button>.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                
+                {canEdit && (
+                  <div className="flex flex-wrap gap-3 mb-6">
+                    <div className={`p-3 bg-gray-50 rounded-lg border ${mediaCounts.images >= 3 ? 'border-amber-400' : 'border-gray-200'}`}>
+                      <div className="text-sm font-medium mb-1">Images</div>
+                      <div className="flex items-center">
+                        <span className="text-2xl font-bold">{mediaCounts.images}</span>
+                        <span className="text-gray-500 ml-1">/ 3</span>
+                      </div>
+                    </div>
+                    <div className={`p-3 bg-gray-50 rounded-lg border ${mediaCounts.videos >= 3 ? 'border-amber-400' : 'border-gray-200'}`}>
+                      <div className="text-sm font-medium mb-1">Videos</div>
+                      <div className="flex items-center">
+                        <span className="text-2xl font-bold">{mediaCounts.videos}</span>
+                        <span className="text-gray-500 ml-1">/ 3</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 {isLoadingItems ? (
                   <div className="text-center py-8">
                     <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-maasta-primary border-r-transparent"></div>
@@ -563,6 +697,13 @@ const ArtistPortfolio = () => {
             </DialogDescription>
           </DialogHeader>
           
+          {limitError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{limitError}</AlertDescription>
+            </Alert>
+          )}
+          
           <Form {...portfolioForm}>
             <form onSubmit={portfolioForm.handleSubmit(onPortfolioItemSubmit)} className="space-y-6">
               <FormField
@@ -614,8 +755,12 @@ const ArtistPortfolio = () => {
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="image">Image</SelectItem>
-                          <SelectItem value="video">Video</SelectItem>
+                          <SelectItem value="image" disabled={mediaCounts.images >= 3 && !currentItem?.media_type.includes("image")}>
+                            Image {mediaCounts.images >= 3 && !currentItem?.media_type.includes("image") && "(Limit reached)"}
+                          </SelectItem>
+                          <SelectItem value="video" disabled={mediaCounts.videos >= 3 && !currentItem?.media_type.includes("video")}>
+                            Video {mediaCounts.videos >= 3 && !currentItem?.media_type.includes("video") && "(Limit reached)"}
+                          </SelectItem>
                           <SelectItem value="link">External Link</SelectItem>
                           <SelectItem value="social">Social Media Profile</SelectItem>
                         </SelectContent>
@@ -629,6 +774,9 @@ const ArtistPortfolio = () => {
               {portfolioForm.watch("media_type") === "image" ? (
                 <div>
                   <FormLabel>Image</FormLabel>
+                  <div className="mt-2 mb-1 text-xs text-gray-500">
+                    Max file size: 5MB. Formats: JPG, PNG
+                  </div>
                   <div className="mt-2">
                     {mediaPreview ? (
                       <div className="relative mb-4">
@@ -657,11 +805,12 @@ const ArtistPortfolio = () => {
                           type="button"
                           variant="outline"
                           onClick={() => document.getElementById("portfolioImage")?.click()}
+                          disabled={mediaCounts.images >= 3 && !currentItem}
                         >
                           Upload Image
                         </Button>
                         <p className="text-xs text-gray-500 mt-2">
-                          JPG, PNG, or GIF up to 10MB
+                          JPG, PNG up to 5MB
                         </p>
                       </div>
                     )}
@@ -677,6 +826,9 @@ const ArtistPortfolio = () => {
               ) : portfolioForm.watch("media_type") === "video" ? (
                 <div>
                   <FormLabel>Video</FormLabel>
+                  <div className="mt-2 mb-1 text-xs text-gray-500">
+                    Max file size: 50MB. Formats: MP4, WebM
+                  </div>
                   <div className="mt-2">
                     {videoUrl ? (
                       <div className="relative mb-4">
@@ -705,11 +857,12 @@ const ArtistPortfolio = () => {
                           type="button"
                           variant="outline"
                           onClick={() => document.getElementById("portfolioVideo")?.click()}
+                          disabled={mediaCounts.videos >= 3 && !currentItem}
                         >
                           Upload Video
                         </Button>
                         <p className="text-xs text-gray-500 mt-2">
-                          MP4, WebM, or OGG up to 50MB
+                          MP4, WebM up to 50MB
                         </p>
                       </div>
                     )}
@@ -810,7 +963,7 @@ const ArtistPortfolio = () => {
                 </Button>
                 <Button 
                   type="submit"
-                  disabled={saveItemMutation.isPending}
+                  disabled={saveItemMutation.isPending || !!limitError}
                   className="bg-maasta-primary hover:bg-maasta-primary/80"
                 >
                   {saveItemMutation.isPending ? "Saving..." : currentItem ? "Save Changes" : "Add to Portfolio"}
