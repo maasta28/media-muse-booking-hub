@@ -79,9 +79,9 @@ const BookingModal = ({
     try {
       await createBooking({
         eventId,
-        seatCount: data.seatCount,
         userId: user.id,
-        totalAmount: totalPrice,
+        seatCount: data.seatCount,
+        totalAmount: totalPrice
       });
 
       toast.success("Booking successful! Check your email for confirmation.");
