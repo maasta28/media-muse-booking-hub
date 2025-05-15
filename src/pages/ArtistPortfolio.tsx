@@ -25,14 +25,17 @@ import {
 import { 
   checkPortfolioLimits,
   validateFileSize,
-  getMediaCounts 
+  getMediaCounts,
+  checkUserHasProfile,
+  uploadMultiplePortfolioMedia
 } from "@/services/portfolioService";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { User, Calendar, Clock, MapPin, Image, Video, Link, Edit, Trash2, Plus, Instagram, Linkedin, Facebook, Youtube, ExternalLink, AlertCircle } from "lucide-react";
+import { User, Calendar, Clock, MapPin, Image, Video, Link, Edit, Trash2, Plus, Instagram, Linkedin, Facebook, Youtube, ExternalLink, AlertCircle, Upload } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 
 // Form schema for portfolio item
 const portfolioItemSchema = z.object({
@@ -47,12 +50,24 @@ const portfolioItemSchema = z.object({
 
 type PortfolioItemFormValues = z.infer<typeof portfolioItemSchema>;
 
+// New schema for multiple uploads
+const multipleUploadSchema = z.object({
+  title: z.string().min(2, "Title must be at least 2 characters"),
+  description: z.string().min(2, "Description is required"),
+  media_type: z.enum(["image", "video"], {
+    required_error: "Please select a media type",
+  }),
+});
+
+type MultipleUploadFormValues = z.infer<typeof multipleUploadSchema>;
+
 const ArtistPortfolio = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, artistProfile } = useAuth();
   const [isPortfolioDialogOpen, setIsPortfolioDialogOpen] = useState(false);
+  const [isMultipleUploadDialogOpen, setIsMultipleUploadDialogOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState<PortfolioItem | null>(null);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
@@ -60,6 +75,9 @@ const ArtistPortfolio = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [limitError, setLimitError] = useState<string | null>(null);
   const [mediaCounts, setMediaCounts] = useState({ images: 0, videos: 0 });
+  const [multipleFiles, setMultipleFiles] = useState<File[]>([]);
+  const [multipleFilePreviews, setMultipleFilePreviews] = useState<string[]>([]);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
 
   // Fetch artist data
   const { 
@@ -93,6 +111,25 @@ const ArtistPortfolio = () => {
 
   // Check if the user is allowed to edit this profile
   const canEdit = user && (id === user.id);
+  
+  // Check if the current user already has a portfolio
+  useEffect(() => {
+    const checkExistingProfile = async () => {
+      if (user && user.id !== id && !artistProfile) {
+        // User is viewing someone else's portfolio and doesn't have their own
+        setIsCreatingProfile(false);
+      } else if (user && artistProfile) {
+        // User already has a portfolio
+        if (user.id !== id) {
+          // User is viewing someone else's portfolio
+          toast.info("You already have a portfolio. You can edit your own portfolio.");
+        }
+        setIsCreatingProfile(false);
+      }
+    };
+    
+    checkExistingProfile();
+  }, [user, id, artistProfile]);
 
   // Setup form for portfolio item
   const portfolioForm = useForm<PortfolioItemFormValues>({
@@ -101,6 +138,16 @@ const ArtistPortfolio = () => {
       title: "",
       description: "",
       media_url: "",
+      media_type: "image",
+    },
+  });
+
+  // Setup form for multiple uploads
+  const multipleUploadForm = useForm<MultipleUploadFormValues>({
+    resolver: zodResolver(multipleUploadSchema),
+    defaultValues: {
+      title: "",
+      description: "",
       media_type: "image",
     },
   });
@@ -187,6 +234,65 @@ const ArtistPortfolio = () => {
     }
   });
 
+  // Multiple upload mutation
+  const multipleUploadMutation = useMutation({
+    mutationFn: async (values: MultipleUploadFormValues) => {
+      if (!user) {
+        throw new Error("You must be logged in to upload files");
+      }
+
+      if (!multipleFiles.length) {
+        throw new Error("Please select files to upload");
+      }
+
+      // Check upload limits
+      const mediaType = values.media_type;
+      const { images, videos } = await getMediaCounts(id!);
+      const currentCount = mediaType === 'image' ? images : videos;
+      const maxAllowed = mediaType === 'image' ? 3 : 3;
+      
+      if (currentCount + multipleFiles.length > maxAllowed) {
+        throw new Error(`You can only have up to ${maxAllowed} ${mediaType}s in total. You can upload ${maxAllowed - currentCount} more.`);
+      }
+
+      // Upload files
+      setUploadProgress(10);
+      const folderName = mediaType === 'image' ? 'portfolio-images' : 'portfolio-videos';
+      const urls = await uploadMultiplePortfolioMedia(multipleFiles, folderName, mediaType);
+      setUploadProgress(50);
+
+      // Create portfolio items for each file
+      const items = [];
+      for (let i = 0; i < urls.length; i++) {
+        const item = await savePortfolioItem({
+          artist_id: id!,
+          title: `${values.title} ${i + 1}`,
+          description: values.description,
+          media_url: urls[i],
+          media_type: mediaType
+        });
+        items.push(item);
+      }
+      
+      setUploadProgress(100);
+      return items;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["portfolio-items", id] });
+      setIsMultipleUploadDialogOpen(false);
+      setMultipleFiles([]);
+      setMultipleFilePreviews([]);
+      setUploadProgress(0);
+      multipleUploadForm.reset();
+      toast.success("Files uploaded successfully");
+      refetchPortfolioItems();
+    },
+    onError: (error: Error) => {
+      setUploadProgress(0);
+      toast.error(error.message || "Failed to upload files");
+    }
+  });
+
   // Delete portfolio item mutation
   const deleteItemMutation = useMutation({
     mutationFn: (itemId: string) => deletePortfolioItem(itemId),
@@ -209,8 +315,15 @@ const ArtistPortfolio = () => {
       return;
     }
 
+    // Check if user is trying to edit someone else's portfolio
     if (id !== user.id) {
       toast.error("You can only edit your own portfolio");
+      return;
+    }
+
+    // Check if user has their own portfolio already but is trying to create a new one
+    if (!artistProfile && id !== user.id) {
+      toast.error("You can only create one portfolio per account");
       return;
     }
 
@@ -237,6 +350,26 @@ const ArtistPortfolio = () => {
     }
     
     setIsPortfolioDialogOpen(true);
+  };
+
+  const openMultipleUploadDialog = () => {
+    setLimitError(null);
+    
+    if (!user) {
+      toast.error("Please sign in to manage your portfolio");
+      navigate("/auth");
+      return;
+    }
+
+    if (id !== user.id) {
+      toast.error("You can only edit your own portfolio");
+      return;
+    }
+
+    setMultipleFiles([]);
+    setMultipleFilePreviews([]);
+    multipleUploadForm.reset();
+    setIsMultipleUploadDialogOpen(true);
   };
 
   const handleMediaFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -285,8 +418,65 @@ const ArtistPortfolio = () => {
     }
   };
 
+  // Handle multiple file selection
+  const handleMultipleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    const mediaType = multipleUploadForm.getValues("media_type");
+    const fileArray: File[] = [];
+    const previewArray: string[] = [];
+    
+    // Process each file
+    Array.from(files).forEach(file => {
+      // Validate file type
+      if (mediaType === 'image' && !file.type.startsWith('image/')) {
+        toast.error(`"${file.name}" is not a valid image file (JPG, PNG)`);
+        return;
+      }
+      if (mediaType === 'video' && !file.type.startsWith('video/')) {
+        toast.error(`"${file.name}" is not a valid video file (MP4, WebM)`);
+        return;
+      }
+      
+      // Validate file size
+      const isValidSize = validateFileSize(file, mediaType);
+      if (!isValidSize) {
+        toast.error(
+          `"${file.name}" is too large. Maximum size allowed is ${mediaType === 'image' ? '5MB' : '50MB'}`
+        );
+        return;
+      }
+      
+      fileArray.push(file);
+      
+      // Create preview for images
+      if (mediaType === 'image') {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setMultipleFilePreviews(prev => [...prev, reader.result as string]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // For video files, we'll just add a placeholder
+        previewArray.push(URL.createObjectURL(file));
+      }
+    });
+    
+    setMultipleFiles(prev => [...prev, ...fileArray]);
+  };
+
+  const removeMultipleFile = (index: number) => {
+    setMultipleFiles(prev => prev.filter((_, i) => i !== index));
+    setMultipleFilePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
   const onPortfolioItemSubmit = (values: PortfolioItemFormValues) => {
     saveItemMutation.mutate(values);
+  };
+
+  const onMultipleUploadSubmit = (values: MultipleUploadFormValues) => {
+    multipleUploadMutation.mutate(values);
   };
 
   const handleMediaTypeChange = (value: "image" | "video" | "link" | "social") => {
@@ -312,6 +502,33 @@ const ArtistPortfolio = () => {
     } else {
       portfolioForm.setValue("social_platform", undefined);
     }
+  };
+
+  const handleMultipleMediaTypeChange = (value: "image" | "video") => {
+    multipleUploadForm.setValue("media_type", value);
+    // Reset files when changing media type
+    setMultipleFiles([]);
+    setMultipleFilePreviews([]);
+    
+    // Check limits for the selected media type
+    if ((value === 'image' && mediaCounts.images >= 3) || 
+        (value === 'video' && mediaCounts.videos >= 3)) {
+      setLimitError(
+        `You can only upload up to 3 ${value}s. Please remove existing files to upload new ones.`
+      );
+    } else {
+      setLimitError(null);
+    }
+  };
+
+  const redirectToCreateProfile = () => {
+    if (!user) {
+      toast.error("Please sign in to create a portfolio");
+      navigate("/auth");
+      return;
+    }
+    
+    navigate("/artist/edit");
   };
 
   // Helper to render social media icon
@@ -353,6 +570,17 @@ const ArtistPortfolio = () => {
           <div className="text-center">
             <h2 className="text-2xl font-bold text-red-500 mb-2">Artist Not Found</h2>
             <p className="text-gray-600">The artist profile you're looking for doesn't exist or has been removed.</p>
+            {user && !artistProfile && (
+              <div className="mt-6">
+                <p className="mb-4">Would you like to create your own portfolio?</p>
+                <Button 
+                  onClick={redirectToCreateProfile}
+                  className="bg-maasta-primary hover:bg-maasta-primary/80"
+                >
+                  Create Portfolio
+                </Button>
+              </div>
+            )}
             <Button 
               onClick={() => navigate("/artists")} 
               variant="outline"
@@ -501,20 +729,29 @@ const ArtistPortfolio = () => {
             
             <TabsContent value="portfolio" className="animate-fade-in">
               <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-semibold">Portfolio</h2>
-                  {canEdit && (
-                    <Button 
-                      onClick={() => openPortfolioDialog()} 
-                      className="bg-maasta-primary hover:bg-maasta-primary/80"
-                    >
-                      <Plus size={18} className="mr-1" />
-                      Add Item
-                    </Button>
-                  )}
-                </div>
+                {canEdit && (
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold">Portfolio</h2>
+                    <div className="flex space-x-2">
+                      <Button 
+                        onClick={openMultipleUploadDialog} 
+                        className="bg-maasta-primary hover:bg-maasta-primary/80"
+                      >
+                        <Upload size={18} className="mr-1" />
+                        Bulk Upload
+                      </Button>
+                      <Button 
+                        onClick={() => openPortfolioDialog()} 
+                        className="bg-maasta-primary hover:bg-maasta-primary/80"
+                      >
+                        <Plus size={18} className="mr-1" />
+                        Add Item
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 
-                {!user && (
+                {!user ? (
                   <Alert variant="default" className="mb-6 bg-blue-50 border-blue-200">
                     <AlertCircle className="h-4 w-4 text-blue-500" />
                     <AlertDescription className="text-blue-700">
@@ -528,7 +765,21 @@ const ArtistPortfolio = () => {
                       </Button>.
                     </AlertDescription>
                   </Alert>
-                )}
+                ) : user.id !== id && !artistProfile ? (
+                  <Alert variant="default" className="mb-6 bg-blue-50 border-blue-200">
+                    <AlertCircle className="h-4 w-4 text-blue-500" />
+                    <AlertDescription className="text-blue-700">
+                      <span className="font-semibold">Would you like to create your own portfolio?</span>{' '}
+                      <Button 
+                        variant="link" 
+                        onClick={redirectToCreateProfile} 
+                        className="p-0 h-auto text-blue-600 font-semibold"
+                      >
+                        Create portfolio
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
                 
                 {canEdit && (
                   <div className="flex flex-wrap gap-3 mb-6">
@@ -560,13 +811,22 @@ const ArtistPortfolio = () => {
                       {canEdit ? (
                         <>
                           <p className="text-gray-600 mb-4">You haven't added any portfolio items yet.</p>
-                          <Button 
-                            onClick={() => openPortfolioDialog()} 
-                            className="bg-maasta-primary hover:bg-maasta-primary/80"
-                          >
-                            <Plus size={18} className="mr-1" />
-                            Add Your First Item
-                          </Button>
+                          <div className="flex gap-2 justify-center">
+                            <Button
+                              onClick={openMultipleUploadDialog}
+                              className="bg-maasta-primary hover:bg-maasta-primary/80"
+                            >
+                              <Upload size={18} className="mr-1" />
+                              Bulk Upload
+                            </Button>
+                            <Button 
+                              onClick={() => openPortfolioDialog()} 
+                              className="bg-maasta-primary hover:bg-maasta-primary/80"
+                            >
+                              <Plus size={18} className="mr-1" />
+                              Add Your First Item
+                            </Button>
+                          </div>
                         </>
                       ) : (
                         <p className="text-gray-600">This artist hasn't added any portfolio items yet.</p>
@@ -970,6 +1230,197 @@ const ArtistPortfolio = () => {
                   className="bg-maasta-primary hover:bg-maasta-primary/80"
                 >
                   {saveItemMutation.isPending ? "Saving..." : currentItem ? "Save Changes" : "Add to Portfolio"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Multiple Upload Dialog */}
+      <Dialog open={isMultipleUploadDialogOpen} onOpenChange={setIsMultipleUploadDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Bulk Upload</DialogTitle>
+            <DialogDescription>
+              Upload multiple files to your portfolio at once.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {limitError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{limitError}</AlertDescription>
+            </Alert>
+          )}
+          
+          <Form {...multipleUploadForm}>
+            <form onSubmit={multipleUploadForm.handleSubmit(onMultipleUploadSubmit)} className="space-y-6">
+              <FormField
+                control={multipleUploadForm.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Base Title</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Base title for all uploads" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={multipleUploadForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Description to use for all uploaded files" 
+                        className="min-h-[80px]"
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={multipleUploadForm.control}
+                name="media_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Media Type</FormLabel>
+                    <FormControl>
+                      <Select
+                        value={field.value}
+                        onValueChange={(value: "image" | "video") => {
+                          handleMultipleMediaTypeChange(value);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="image" disabled={mediaCounts.images >= 3}>
+                            Images {mediaCounts.images >= 3 && "(Limit reached)"}
+                          </SelectItem>
+                          <SelectItem value="video" disabled={mediaCounts.videos >= 3}>
+                            Videos {mediaCounts.videos >= 3 && "(Limit reached)"}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <div>
+                <FormLabel>Select Files</FormLabel>
+                <div className="mt-2 mb-1 text-xs text-gray-500">
+                  {multipleUploadForm.watch("media_type") === "image" 
+                    ? `Max file size: 5MB each. You can upload up to ${3 - mediaCounts.images} more images.`
+                    : `Max file size: 50MB each. You can upload up to ${3 - mediaCounts.videos} more videos.`
+                  }
+                </div>
+                
+                <div className="mt-2">
+                  <div className="border-2 border-dashed border-gray-300 rounded-md p-6 text-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => document.getElementById("multipleFiles")?.click()}
+                      disabled={
+                        (multipleUploadForm.watch("media_type") === "image" && mediaCounts.images >= 3) || 
+                        (multipleUploadForm.watch("media_type") === "video" && mediaCounts.videos >= 3)
+                      }
+                    >
+                      Select Files
+                    </Button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {multipleUploadForm.watch("media_type") === "image" 
+                        ? "JPG, PNG up to 5MB each" 
+                        : "MP4, WebM up to 50MB each"
+                      }
+                    </p>
+                  </div>
+                  <input
+                    id="multipleFiles"
+                    type="file"
+                    accept={multipleUploadForm.watch("media_type") === "image" ? "image/*" : "video/*"}
+                    multiple
+                    className="hidden"
+                    onChange={handleMultipleFilesChange}
+                  />
+                </div>
+              </div>
+              
+              {multipleFiles.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Selected Files ({multipleFiles.length})</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
+                    {multipleFiles.map((file, index) => (
+                      <div key={file.name + index} className="relative">
+                        {multipleUploadForm.watch("media_type") === "image" && multipleFilePreviews[index] ? (
+                          <div className="h-24 w-full overflow-hidden rounded-md">
+                            <img 
+                              src={multipleFilePreviews[index]} 
+                              alt={file.name} 
+                              className="object-cover w-full h-full"
+                            />
+                          </div>
+                        ) : multipleUploadForm.watch("media_type") === "video" ? (
+                          <div className="h-24 w-full bg-gray-100 flex items-center justify-center rounded-md">
+                            <Video className="h-8 w-8 text-gray-400" />
+                          </div>
+                        ) : null}
+                        <div className="text-xs truncate mt-1">{file.name}</div>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                          onClick={() => removeMultipleFile(index)}
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {uploadProgress > 0 && uploadProgress < 100 && (
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div 
+                    className="bg-maasta-primary h-2.5 rounded-full transition-all duration-300" 
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              )}
+              
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsMultipleUploadDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit"
+                  disabled={
+                    multipleUploadMutation.isPending || 
+                    multipleFiles.length === 0 || 
+                    !!limitError
+                  }
+                  className="bg-maasta-primary hover:bg-maasta-primary/80"
+                >
+                  {multipleUploadMutation.isPending ? "Uploading..." : "Upload Files"}
                 </Button>
               </DialogFooter>
             </form>

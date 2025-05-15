@@ -89,3 +89,46 @@ export const checkUserHasProfile = async (userId: string): Promise<boolean> => {
     return false;
   }
 };
+
+/**
+ * Upload multiple portfolio media files
+ */
+export const uploadMultiplePortfolioMedia = async (
+  files: File[],
+  folder: string,
+  mediaType: 'image' | 'video'
+): Promise<string[]> => {
+  const urls: string[] = [];
+  
+  for (const file of files) {
+    // Validate file size
+    if (!validateFileSize(file, mediaType)) {
+      throw new Error(
+        `File "${file.name}" exceeds maximum size of ${mediaType === 'image' ? '5MB' : '50MB'}`
+      );
+    }
+    
+    // Generate a unique filename
+    const timestamp = new Date().getTime();
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${timestamp}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+    
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from(folder)
+      .upload(fileName, file);
+    
+    if (error) {
+      throw new Error(`Failed to upload file "${file.name}": ${error.message}`);
+    }
+    
+    // Get the public URL
+    const { data: publicUrlData } = supabase.storage
+      .from(folder)
+      .getPublicUrl(fileName);
+      
+    urls.push(publicUrlData.publicUrl);
+  }
+  
+  return urls;
+};

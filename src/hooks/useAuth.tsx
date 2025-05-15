@@ -29,6 +29,26 @@ export const useAuth = () => {
     },
   });
 
+  // Fetch artist profile if exists
+  const { data: artistProfile } = useQuery({
+    queryKey: ["artist-profile", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("artists")
+        .select("*")
+        .eq("id", user!.id)
+        .maybeSingle();
+      
+      if (error) {
+        console.error("Error fetching artist profile:", error);
+        return null;
+      }
+      
+      return data;
+    },
+  });
+
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -61,6 +81,7 @@ export const useAuth = () => {
     user, 
     session, 
     profile,
+    artistProfile, // Add this to check if user already has an artist profile
     isLoading,
     signOut,
     isOrganizer: profile?.is_organizer || false,
