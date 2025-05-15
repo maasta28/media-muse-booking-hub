@@ -77,12 +77,12 @@ const BookingModal = ({
 
     setIsSubmitting(true);
     try {
-      await createBooking({
+      await createBooking(
         eventId,
-        userId: user.id,
-        seatCount: data.seatCount,
-        totalAmount: totalPrice
-      });
+        user.id,
+        data.seatCount,
+        totalPrice
+      );
 
       toast.success("Booking successful! Check your email for confirmation.");
       onClose();

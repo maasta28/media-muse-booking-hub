@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -81,12 +80,16 @@ const ArtistPortfolio = () => {
     queryKey: ["portfolio-items", id],
     queryFn: () => fetchPortfolioItems(id!),
     enabled: !!id,
-    onSuccess: (data) => {
-      const images = data.filter(item => item.media_type === 'image').length;
-      const videos = data.filter(item => item.media_type === 'video').length;
+  });
+
+  // Update media counts when portfolio items change
+  useEffect(() => {
+    if (portfolioItems && portfolioItems.length > 0) {
+      const images = portfolioItems.filter(item => item.media_type === 'image').length;
+      const videos = portfolioItems.filter(item => item.media_type === 'video').length;
       setMediaCounts({ images, videos });
     }
-  });
+  }, [portfolioItems]);
 
   // Check if the user is allowed to edit this profile
   const canEdit = user && (id === user.id);
