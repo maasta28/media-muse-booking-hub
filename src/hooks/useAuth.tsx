@@ -30,7 +30,7 @@ export const useAuth = () => {
   });
 
   // Fetch artist profile if exists
-  const { data: artistProfile } = useQuery({
+  const { data: artistProfile, isError: artistProfileError } = useQuery({
     queryKey: ["artist-profile", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -40,7 +40,7 @@ export const useAuth = () => {
         .eq("id", user!.id)
         .maybeSingle();
       
-      if (error) {
+      if (error && error.code !== 'PGRST116') {
         console.error("Error fetching artist profile:", error);
         return null;
       }
@@ -48,6 +48,9 @@ export const useAuth = () => {
       return data;
     },
   });
+
+  // Check if user has profile (simplified access helper)
+  const hasArtistProfile = !!artistProfile;
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -81,7 +84,8 @@ export const useAuth = () => {
     user, 
     session, 
     profile,
-    artistProfile, // Add this to check if user already has an artist profile
+    artistProfile,
+    hasArtistProfile,
     isLoading,
     signOut,
     isOrganizer: profile?.is_organizer || false,

@@ -77,13 +77,14 @@ export const checkUserHasProfile = async (userId: string): Promise<boolean> => {
     const { data, error } = await supabase
       .from('artists')
       .select('id')
-      .eq('id', userId);
+      .eq('user_id', userId)
+      .maybeSingle();
     
-    if (error) {
+    if (error && error.code !== 'PGRST116') {
       throw new Error(`Failed to check user profile: ${error.message}`);
     }
     
-    return data && data.length > 0;
+    return !!data;
   } catch (error) {
     console.error("Error checking user profile:", error);
     return false;

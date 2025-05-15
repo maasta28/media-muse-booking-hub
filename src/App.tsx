@@ -17,6 +17,7 @@ import Auth from "./pages/Auth";
 import OrganizerOnboarding from "./pages/OrganizerOnboarding";
 import OrganizerDashboard from "./pages/OrganizerDashboard";
 import NotFound from "./pages/NotFound";
+import Jobs from "./pages/Jobs";
 
 // Create a client
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/event/create" element={<EventCreate />} />
             <Route path="/events" element={<Events />} />
             <Route path="/auditions" element={<AuditionEvents />} />
+            <Route path="/jobs" element={<Jobs />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/organizer/onboarding" element={<OrganizerOnboarding />} />
             <Route path="/organizer/dashboard" element={<OrganizerDashboard />} />

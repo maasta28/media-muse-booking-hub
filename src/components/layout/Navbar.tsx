@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Search, User, Ticket, LogOut } from "lucide-react";
+import { Menu, X, Search, User, Ticket, LogOut, Briefcase } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,6 +57,12 @@ const Navbar = () => {
           </Link>
           <Link to="/artists" className="text-sm font-medium hover:text-entertainment-600 transition-colors">
             Talents
+          </Link>
+          <Link to="/auditions" className="text-sm font-medium hover:text-entertainment-600 transition-colors">
+            Auditions
+          </Link>
+          <Link to="/jobs" className="text-sm font-medium hover:text-entertainment-600 transition-colors">
+            Jobs
           </Link>
           {isOrganizer && (
             <Link to="/organizer/dashboard" className="text-sm font-medium hover:text-entertainment-600 transition-colors">
@@ -159,6 +165,20 @@ const Navbar = () => {
                 onClick={toggleMenu}
               >
                 Talents
+              </Link>
+              <Link 
+                to="/auditions" 
+                className="text-sm font-medium hover:text-entertainment-600 transition-colors p-2"
+                onClick={toggleMenu}
+              >
+                Auditions
+              </Link>
+              <Link 
+                to="/jobs" 
+                className="text-sm font-medium hover:text-entertainment-600 transition-colors p-2"
+                onClick={toggleMenu}
+              >
+                Jobs
               </Link>
               <Button
                 variant="outline"

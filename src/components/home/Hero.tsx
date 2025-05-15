@@ -31,7 +31,7 @@ const Hero = () => {
                 Create Your Portfolio
               </Link>
             </Button>
-            <Button asChild variant="outline" className="border-white text-white hover:bg-white/10 text-base px-8 py-6">
+            <Button asChild variant="outline" className="border-white text-white hover:bg-white/10 bg-purple-600 hover:bg-purple-700 text-base px-8 py-6">
               <Link to="/artists">
                 Browse Talents
               </Link>
